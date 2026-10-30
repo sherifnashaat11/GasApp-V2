@@ -39,7 +39,13 @@ async function renderHome() {
     state.subscribers.forEach(s => {
       if (!state.sector) state.sector = s.sector;
       if (!state.blk && s.sector === state.sector) state.blk = s.blk;
-      const key = `${s.sector}|${s.blk}|${s.bld}`;
+
+      
+
+
+
+      
+      const key = `${String(s.sector)}|${String(s.blk)}|${String(s.bld)}`;
       if (!state.buildings[key]) state.buildings[key] = { bld: s.bld, apts: [] };
       state.buildings[key].apts.push(s);
     });
