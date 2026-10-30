@@ -121,11 +121,21 @@ async function renderHome() {
     document.querySelectorAll('.bld-card').forEach(card => { card.onclick = () => { state.openBld = card.dataset.bld; renderHome(); }; });
   }
 
+
+
+
+  
   if ($('selSector')) {
     $('selSector').onchange = (e) => { state.sector = e.target.value; state.blk = ''; state.openBld = null; renderHome(); };
     $('selBlk').onchange = (e) => { state.blk = e.target.value; state.openBld = null; renderHome(); };
   }
 
+
+
+
+
+
+  
   if ($('btnExport')) {
     $('btnExport').onclick = async () => {
       const moves = await db.movements.toArray();
