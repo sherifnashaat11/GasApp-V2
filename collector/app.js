@@ -1,9 +1,8 @@
-import { db } from '../shared/db.js';
+import { db } from './shared/db.js';
 import { importFromServer } from './importer.js';
 
 const $ = id => document.getElementById(id);
 let currentTab = 'home';
-
 const state = { sector: '', blk: '', openBld: null, subscribers: [], buildings: {} };
 
 function applyTheme(theme) { document.body.setAttribute('data-theme', theme); localStorage.setItem('app-theme', theme); }
@@ -57,11 +56,7 @@ async function renderHome() {
       <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">القطاع</label><select id="selSector" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); margin-top:5px;">${secs.map(s => `<option value="${s}" ${s === state.sector ? 'selected' : ''}>قطاع ${s}</option>`).join('')}</select></div>
       <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">البلوك</label><select id="selBlk" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); margin-top:5px;">${blks.map(b => `<option value="${b}" ${b === state.blk ? 'selected' : ''}>بلوك ${b}</option>`).join('')}</select></div>
     </div>
-    
-    <!-- زر الأرشفة -->
-    <div style="margin-bottom: 15px;">
-      <button id="btnExport" style="width: 100%; padding: 10px; background: var(--success); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">📤 حفظ الأرشيف على الجهاز</button>
-    </div>
+    <div style="margin-bottom: 15px;"><button id="btnExport" style="width: 100%; padding: 10px; background: var(--success); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">📤 حفظ الأرشيف على الجهاز</button></div>
   `;
 
   if (state.openBld) {
@@ -95,7 +90,11 @@ async function renderHome() {
         document.body.appendChild(d);
         d.showModal();
         const handleMessage = (e) => {
-          if (e.data && e.data.type === 'READING_SAVED') { d.close(); d.remove(); window.removeEventListener('message', handleMessage); renderHome(); }
+          if (e.data && (e.data.type === 'READING_SAVED' || e.data.type === 'READING_CANCEL')) { 
+            d.close(); d.remove(); 
+            window.removeEventListener('message', handleMessage); 
+            renderHome(); 
+          }
         };
         window.addEventListener('message', handleMessage);
       };
@@ -121,12 +120,10 @@ async function renderHome() {
     $('selBlk').onchange = (e) => { state.blk = e.target.value; state.openBld = null; renderHome(); };
   }
 
-  // الأرشفة: تحميل الملف على الجهاز
   if ($('btnExport')) {
     $('btnExport').onclick = async () => {
       const moves = await db.movements.toArray();
       if (moves.length === 0) return alert('لا توجد قراءات جديدة.');
-      
       const archiveData = { collector: 'محصل', date: new Date().toISOString(), movements: moves };
       const blob = new Blob([JSON.stringify(archiveData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -143,10 +140,6 @@ document.addEventListener('click', () => { $('menu').hidden = true; });
 document.querySelectorAll('[data-theme-pick]').forEach(btn => { btn.onclick = () => { applyTheme(btn.dataset.themePick); $('menu').hidden = true; }; });
 document.querySelectorAll('.tabs button').forEach(btn => { btn.onclick = () => switchTab(btn.dataset.tab); });
 $('exitBtn').onclick = () => { if (confirm('هل تريد الخروج؟')) location.reload(); };
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.log));
-}
 
 initTheme();
 switchTab('home');
