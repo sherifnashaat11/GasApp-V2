@@ -1,9 +1,7 @@
 import { db } from '../shared/db.js';
 
-// المفتاح السري المخفي (يجب أن يطابق المفتاح في generator.html)
 const SECRET_KEY = 'GasApp_V2_Ultimate_Secret_2026!';
 
-// دالة توليد المفتاح لفك التشفير
 async function getCryptoKey() {
   const enc = new TextEncoder();
   const baseKey = await crypto.subtle.importKey('raw', enc.encode(SECRET_KEY), 'PBKDF2', false, ['deriveKey']);
@@ -12,12 +10,15 @@ async function getCryptoKey() {
     baseKey,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['decrypt'] // هنا نطلب صلاحية فك التشفير
+    ['decrypt']
   );
 }
 
-// دالة فك الضغط
 async function decompress(arrayBuffer) {
+  // التحقق من دعم الموبايل لهذه الميزة
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('متصفح الموبايل لا يدعم فك الضغط (DecompressionStream). يرجى التحديث أو استخدام متصفح آخر.');
+  }
   const stream = new Blob([arrayBuffer]).stream().pipeThrough(new DecompressionStream('gzip'));
   return new Response(stream).text();
 }
@@ -26,16 +27,14 @@ export async function importFromServer(onProgress = () => {}) {
   try {
     onProgress('جارٍ تحميل الملف...');
     const response = await fetch('../downloads/full.bin');
-    if (!response.ok) throw new Error('الملف غير موجود');
+    if (!response.ok) throw new Error('الملف غير موجود في السيرفر');
     
     onProgress('جارٍ فك التشفير...');
     const combined = new Uint8Array(await response.arrayBuffer());
     
-    // فصل الـ IV عن النص المشفر
     const iv = combined.slice(0, 12);
     const ciphertext = combined.slice(12);
     
-    // فك التشفير
     const key = await getCryptoKey();
     const decryptedBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
     
@@ -56,7 +55,9 @@ export async function importFromServer(onProgress = () => {}) {
     onProgress('تم الاستيراد بنجاح!');
     return { success: true, count: fullData.subscribers.length };
   } catch (error) {
-    console.error(error);
+    console.error('تفاصيل الخطأ:', error);
+    // إظهار الخطأ بوضوح على الموبايل
+    alert('سبب الفشل: ' + error.message);
     throw new Error('فشل الاستيراد: ' + error.message);
   }
 }
