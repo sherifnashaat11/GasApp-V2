@@ -1,5 +1,5 @@
 import { db } from '../shared/db.js';
-import { importFromServer } from './importer.js';
+import { importFromServer } from './import-fix.js';
 
 const $ = id => document.getElementById(id);
 let currentTab = 'home';
