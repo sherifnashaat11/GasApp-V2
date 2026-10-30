@@ -13,15 +13,20 @@
   .header-info { text-align: center; margin-bottom: 10px; }
   .header-info h1 { font-size: 1.2rem; color: var(--primary); font-weight: 800; }
   .header-info p { font-size: 0.85rem; color: var(--mute); margin-top: 5px; line-height: 1.4; }
+  
   .form-group { background: var(--card); padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
   label { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; display: block; }
   input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.5rem; font-weight: 800; text-align: center; color: var(--primary); font-family: inherit; background: var(--bg); direction: ltr; }
+  input:focus { outline: none; border-color: var(--primary); }
+  
   .meta-row { display: flex; justify-content: space-between; background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+  
   .calc-box { background: var(--bg); border-radius: 10px; padding: 12px; border: 1px solid var(--line); margin-top: 5px; }
   .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-bottom: 6px; }
   .calc-row.total { font-size: 18px; color: var(--success); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
+
   .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-  button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 800; cursor: pointer; font-family: inherit; }
+  button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: 0.2s; }
   #saveBtn { background: var(--primary); color: #fff; }
   #cancelBtn { background: transparent; color: var(--mute); border: 2px solid var(--line); }
 </style>
@@ -32,20 +37,24 @@
     <h1>قراءة العداد</h1>
     <p id="clientInfo">جاري التحميل...</p>
   </div>
+  
   <div class="form-group">
     <div class="meta-row">
       <span>أشهر المحاسبة: <span id="monthsDisplay" style="color:var(--primary);">1</span></span>
       <span>القراءة السابقة: <span id="prevReadDisplay" style="color:var(--primary);">0</span></span>
     </div>
+
     <div>
       <label>القراءة الحالية (حد أقصى 5 أرقام)</label>
       <input id="v" type="number" maxlength="5" inputmode="numeric" autocomplete="off" placeholder="00000">
     </div>
+    
     <div class="calc-box">
       <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 m³</span></div>
       <div class="calc-row total"><span>إجمالي الفاتورة:</span><span id="invoiceVal">0 ج.م</span></div>
     </div>
   </div>
+
   <div class="actions">
     <button id="saveBtn">حفظ القراءة</button>
     <button id="cancelBtn">إلغاء</button>
@@ -66,6 +75,9 @@
   document.getElementById('prevReadDisplay').textContent = prevReading;
   document.getElementById('monthsDisplay').textContent = billingMonths;
 
+  // ============================================================
+  // المنطق المحاسبي (الأسعار الحقيقية)
+  // ============================================================
   const DEFAULT_PERIODS = [
     { date:'2016-11-01', tiers:[{name:'الأولى',limit:30,price:0.75},{name:'الثانية',limit:60,price:1.50},{name:'الثالثة',limit:null,price:2.00}] },
     { date:'2017-07-01', tiers:[{name:'الأولى',limit:30,price:1.00},{name:'الثانية',limit:60,price:1.75},{name:'الثالثة',limit:null,price:2.50}] },
@@ -77,22 +89,22 @@
     { date:'2025-10-01', tiers:[{name:'الأولى',limit:30,price:5.00},{name:'الثانية',limit:60,price:6.00},{name:'الثالثة',limit:null,price:9.00}] },
     { date:'2026-03-01', tiers:[{name:'الأولى',limit:30,price:6.00},{name:'الثانية',limit:60,price:8.00},{name:'الثالثة',limit:null,price:12.00}] }
   ];
-  const FEES = 18;
 
-  function smartFmt(val){ const num = Number(val) || 0; return Number.isInteger(num) ? num.toLocaleString('en-US') : num.toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:2}); }
-  function parseDate(s){ const parts = String(s).split('-'); return { y: Number(parts[0])||2026, m: Number(parts[1])||1, d: Number(parts[2])||1 }; }
+  const FEES = 18;
+  function smartFmt(val){ const num = Number(val) || 0; if (Number.isInteger(num)) return num.toLocaleString('en-US'); return num.toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:2}); }
+  function parseDate(s){ const parts = String(s).split('-'); return { y: Number(parts[0])||2026, m: Number(parts[1])||1 }; }
   function mIdx(y,m){ return y*12+(m-1); }
-  
+
   function monthlyCostDetailed(cons, tiers){
     let rem = Number(cons) || 0; let cost = 0; let prev = 0;
     for (let i=0; i<tiers.length; i++){
       if (rem <= 0) break;
       const t = tiers[i];
-      let cap = (t.limit === null || isNaN(t.limit)) ? rem : Math.max(0, Number(t.limit) - prev);
+      let cap = (t.limit === null) ? rem : Math.max(0, Number(t.limit) - prev);
       const used = Math.min(rem, cap);
-      cost += used * (Number(t.price) || 0);
+      cost += used * Number(t.price);
       rem -= used;
-      if (t.limit !== null && !isNaN(t.limit)){ prev = Number(t.limit); }
+      if (t.limit !== null) prev = Number(t.limit);
     }
     return cost;
   }
@@ -103,7 +115,8 @@
     const now = new Date();
     const targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const aEnd = mIdx(targetDate.getFullYear(), targetDate.getMonth() + 1);
-    const aStart = aEnd - billingMonths + 1; 
+    const aStart = aEnd - billingMonths + 1;
+
     const sorted = [...DEFAULT_PERIODS].sort((a,b)=> a.date.localeCompare(b.date));
     let totalConsumptionCost = 0;
 
@@ -112,28 +125,29 @@
       const start = (i === 0) ? -Infinity : mIdx(pDate.y, pDate.m);
       const nextPDate = (i < sorted.length - 1) ? parseDate(sorted[i+1].date) : null;
       const end = nextPDate === null ? Infinity : mIdx(nextPDate.y, nextPDate.m) - 1;
+      
       const s = Math.max(start, aStart);
       const e = Math.min(end, aEnd);
       const overlap = Math.max(0, e - s + 1);
+      
       if (overlap === 0) continue;
-      const cost = monthlyCostDetailed(avg, sorted[i].tiers);
-      totalConsumptionCost += overlap * cost;
+      const monthlyCost = monthlyCostDetailed(avg, sorted[i].tiers);
+      totalConsumptionCost += (overlap * monthlyCost);
     }
-    return { cons, grandTotal: Math.round(totalConsumptionCost + FEES) };
+
+    const grandTotal = Math.round(totalConsumptionCost + FEES);
+    return { cons, grandTotal };
   }
 
   function updateDisplay(currentReading) {
+    if (currentReading < prevReading) {
+      document.getElementById('consumptionVal').textContent = '0 m³';
+      document.getElementById('invoiceVal').textContent = '0 ج.م';
+      return;
+    }
     const result = calculateInvoice(currentReading);
     document.getElementById('consumptionVal').textContent = `${result.cons} m³`;
     document.getElementById('invoiceVal').textContent = `${smartFmt(result.grandTotal)} ج.م`;
-    return result;
-  }
-
-  async function init() {
-    if (!key) return alert('خطأ: لم يتم تمرير كود العميل');
-    const move = await db.movements.where({ key: key }).first();
-    if (move && move.reading) document.getElementById('v').value = move.reading;
-    updateDisplay(Number(document.getElementById('v').value) || prevReading);
   }
 
   document.getElementById('v').addEventListener('input', function() {
@@ -143,23 +157,44 @@
 
   document.getElementById('saveBtn').onclick = async () => {
     const val = Number(document.getElementById('v').value);
-    if (!val || val < prevReading) return alert('⚠️ القراءة يجب أن تكون أكبر من السابقة');
+    if (!val || val < prevReading) {
+      return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
+    }
+    
     const result = calculateInvoice(val);
+    document.getElementById('saveBtn').textContent = '⏳ جارٍ الحفظ...';
+    
     try {
       const existing = await db.movements.where({ key: key }).first();
-      if (existing) await db.movements.update(existing.id, { reading: val, consumption: result.cons, estimatedInvoice: result.grandTotal, months: billingMonths, date: new Date().toISOString() });
-      else await db.movements.add({ key: key, period: '2026-11', reading: val, prevReading: prevReading, consumption: result.cons, estimatedInvoice: result.grandTotal, months: billingMonths, status: 'pending', date: new Date().toISOString() });
+      if (existing) {
+        await db.movements.update(existing.id, { 
+          reading: val, consumption: result.cons, estimatedInvoice: result.grandTotal, date: new Date().toISOString() 
+        });
+      } else {
+        await db.movements.add({
+          key: key, period: '2026-11', reading: val, prevReading: prevReading, 
+          consumption: result.cons, estimatedInvoice: result.grandTotal, months: billingMonths, status: 'pending', date: new Date().toISOString()
+        });
+      }
       
-      if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_SAVED' }, '*');
-      else window.close();
-    } catch (err) { alert('خطأ: ' + err.message); }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'READING_SAVED' }, '*');
+      } else {
+        window.close();
+      }
+    } catch (err) {
+      alert('خطأ في الحفظ: ' + err.message);
+      document.getElementById('saveBtn').textContent = 'حفظ القراءة';
+    }
   };
 
   document.getElementById('cancelBtn').onclick = () => {
-    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
-    else window.close();
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
+    } else {
+      window.close();
+    }
   };
-  init();
 </script>
 </body>
 </html>
