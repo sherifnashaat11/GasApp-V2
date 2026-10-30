@@ -44,7 +44,19 @@ export async function importFromServer(onProgress = () => {}) {
     onProgress(`تم العثور على ${fullData.subscribers.length} عميل. جارٍ الحفظ...`);
     
     // مسح البيانات القديمة
-    await db.subscribers.clear(); 
+    //await db.subscribers.clear(); 
+
+
+try {
+  await db.open(); // إجبار قاعدة البيانات على العمل
+  await db.subscribers.clear(); // مسح البيانات القديمة
+} catch (e) {
+  console.warn("تم تجاهل خطأ المسح، سيتم الحفظ فوق البيانات:", e);
+}
+
+
+
+
     
     const BATCH_SIZE = 5000;
     for (let i = 0; i < fullData.subscribers.length; i += BATCH_SIZE) {
