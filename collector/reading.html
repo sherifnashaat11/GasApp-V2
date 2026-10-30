@@ -62,8 +62,8 @@
 </div>
 
 <script type="module">
-  import { db } from './shared/db.js';
 
+import { db } from '../shared/db.js';
   const p = new URLSearchParams(location.search);
   const key = p.get('k');
   const name = p.get('n') || 'بدون اسم';
