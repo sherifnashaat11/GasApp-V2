@@ -1,0 +1,8 @@
+{
+  "version": "2026-11",
+  "subscribers": [
+    { "key": "0102040401010100", "gov": "01", "area": "02", "sector": "04", "blk": "01", "bld": "01", "apt": "01", "name": "أحمد محمد", "prevReading": 100, "months": 1 },
+    { "key": "0102040401010200", "gov": "01", "area": "02", "sector": "04", "blk": "01", "bld": "01", "apt": "02", "name": "محمود علي", "prevReading": 150, "months": 1 },
+    { "key": "0102040401010300", "gov": "01", "area": "02", "sector": "04", "blk": "01", "bld": "01", "apt": "03", "name": "سعيد حسن", "prevReading": 200, "months": 2 }
+  ]
+}

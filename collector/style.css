@@ -1,0 +1,48 @@
+/* ============================================================
+   style.css - تصميم التطبيق
+============================================================ */
+:root {
+  --bg: #f4f7fa; --card: #ffffff; --ink: #0f2438; --mute: #6b7f8f;
+  --line: #d6e0e8; --primary: #7c3aed; --success: #0d9668; --danger: #d63a3a;
+}
+body[data-theme="dark"] {
+  --bg: #0a1722; --card: #1a2f42; --ink: #e7eff5; --mute: #8da4b4;
+  --line: #2a4257; --primary: #a78bfa;
+}
+body[data-theme="desert"] {
+  --bg: #fdf6ec; --card: #fffaf0; --ink: #3b2a1a; --mute: #8a6f52;
+  --line: #e6d3b8; --primary: #c2620a;
+}
+body[data-theme="highcontrast"] {
+  --bg: #000000; --card: #111111; --ink: #ffffff; --mute: #b0b0b0;
+  --line: #2a2a2a; --primary: #b388ff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+body { background: var(--bg); color: var(--ink); min-height: 100dvh; overflow-x: hidden; transition: 0.3s; }
+
+/* الهيدر */
+.top { background: var(--card); border-bottom: 2px solid var(--line); padding: 10px 15px; }
+.top-inner { display: flex; align-items: center; justify-content: space-between; max-width: 640px; margin: 0 auto; }
+.top-start { display: flex; gap: 8px; align-items: center; }
+.top-center { display: flex; align-items: center; gap: 10px; }
+.top-center svg { width: 32px; height: 32px; }
+.top h1 { font-size: 16px; font-weight: 800; }
+.top p { font-size: 11px; color: var(--mute); }
+.ico { background: var(--bg); border: 1px solid var(--line); color: var(--ink); width: 38px; height: 38px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.pill { background: var(--bg); border: 1px solid var(--line); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+
+/* القائمة المنسدلة */
+.menu { position: absolute; top: 60px; left: 15px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); z-index: 100; display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+.menu button { background: none; border: none; text-align: right; padding: 10px; font: inherit; color: var(--ink); border-radius: 8px; cursor: pointer; }
+.menu button:hover { background: var(--bg); }
+.menu[hidden] { display: none; }
+
+/* الحاويات */
+main { max-width: 640px; margin: 0 auto; padding: 15px; padding-bottom: 80px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+
+/* الشريط السفلي */
+.tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); display: flex; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 50; }
+.tabs button { flex: 1; background: none; border: none; padding: 12px; font: inherit; color: var(--mute); font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.tabs button.on { color: var(--primary); border-top: 3px solid var(--primary); }
