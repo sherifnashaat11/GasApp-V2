@@ -54,6 +54,7 @@ export async function importFromServer(onProgress = () => {}) {
     }
 
     onProgress(`تم العثور على ${fullData.subscribers.length} عميل. جارٍ الحفظ...`);
+    await db.subscribers.clear(); // مسح البيانات القديمة
     
     // حفظ البيانات في قاعدة البيانات المحلية
     const BATCH_SIZE = 5000;
