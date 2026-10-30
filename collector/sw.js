@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gas-v2-cache-v11';
+const CACHE_NAME = 'gas-v2-cache-v12';
 const ASSETS = [
   './index.html', './app.js', './style.css', './dexie.min.js', './reading.html',
   './shared/db.js', './shared/subscriber-key.js'
