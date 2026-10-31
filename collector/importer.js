@@ -1,4 +1,4 @@
-import { db } from '../shared/db.js';
+import { db, normalizeSubscriber } from '../shared/db.js';
 
 const SECRET_KEY = 'GasApp_V2_Ultimate_Secret_2026!';
 
@@ -49,12 +49,8 @@ export async function importFromServer(onProgress = () => {}) {
     const BATCH_SIZE = 5000;
     for (let i = 0; i < fullData.subscribers.length; i += BATCH_SIZE) {
       const batch = fullData.subscribers.slice(i, i + BATCH_SIZE);
-      const fixedBatch = batch.map((s, idx) => {
-        if (!s.key || String(s.key).trim() === '') {
-          s.key = 'TMP_' + (s.gov || '00') + (s.area || '00') + (s.sector || '00') + (s.blk || '00') + (s.bld || '00') + (s.apt || '00') + '_' + (i + idx);
-        }
-        return s;
-      });
+      // V3.2: تطبيع إلى كود 16 رقم + region/route/sub (والمكرر حرفياً يُدمج بنفس المفتاح)
+      const fixedBatch = batch.map(normalizeSubscriber);
       await db.subscribers.bulkPut(fixedBatch);
       onProgress(`تم حفظ ${Math.min(i + BATCH_SIZE, fullData.subscribers.length)}...`);
     }

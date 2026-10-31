@@ -600,3 +600,70 @@ dialog textarea {
   .top-center svg { width: 26px; height: 26px; }
   main { padding: 10px; }
 }
+
+/* ============================================================
+   17. إضافات V3.2 (الصفحات + مكوّنات app.js)
+============================================================ */
+.view { display: none; }
+.view.active { display: block; }
+
+.const-card { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px; cursor: default; user-select: none; }
+.chip { flex: 1 1 70px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; text-align: center; }
+.chip small { display: block; font-size: 10.5px; color: var(--mute); font-weight: 700; }
+.chip b { font-size: 14px; color: var(--ink); }
+
+.sel-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.sel-grid label { font-size: 12px; font-weight: 800; display: block; margin-bottom: 3px; }
+.sel-grid select, .search-filters select {
+  width: 100%; padding: 9px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink); font-family: inherit; font-size: 14px;
+}
+.sel-grid select:disabled { opacity: .5; }
+
+.bld-card {
+  display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-right: 5px solid var(--primary);
+  border-radius: 10px; padding: 12px; margin-bottom: 10px; color: var(--ink);
+}
+.bld-card b { font-size: 15px; }
+.bld-card .due { color: var(--danger); font-weight: 800; font-size: 15px; }
+
+.apt-card { padding: 10px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.apt-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.apt-main input[type=checkbox] { width: 18px; height: 18px; flex: none; }
+.apt-name { font-weight: 800; font-size: 14px; }
+.apt-sub { font-size: 12px; color: var(--mute); margin-top: 3px; }
+.apt-due { color: var(--danger); font-weight: 800; font-size: 12px; margin-top: 3px; }
+.card.paid .apt-due { color: var(--paid-ink); }
+.apt-actions { display: flex; gap: 5px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.mini { border: none; padding: 7px 10px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 12px; }
+.mini.pay { background: var(--warning); color: var(--warning-ink); }
+.mini.read { background: var(--primary); color: var(--primary-ink); }
+.mini.done { background: var(--success); color: var(--success-ink); }
+.mini.ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+
+.selection-bar {
+  position: fixed; bottom: 70px; left: 10px; right: 10px; z-index: 100; text-align: center;
+  background: var(--card); color: var(--ink); padding: 12px; border-radius: 12px;
+  box-shadow: 0 -4px 15px var(--shadow); border: 2px solid var(--primary);
+}
+.selection-bar .btn { width: 100%; margin-top: 8px; }
+
+.code-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; direction: ltr; margin-bottom: 10px; }
+.code-grid div { text-align: center; }
+.code-grid small { display: block; font-size: 10.5px; color: var(--mute); font-weight: 700; margin-top: 2px; direction: rtl; }
+.code-grid input { text-align: center; font-size: 17px; font-weight: 800; letter-spacing: 1px; }
+
+.row-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.row-title h3 { font-size: 15px; font-weight: 800; margin: 0; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 800; background: var(--warning); color: var(--warning-ink); margin-right: 6px; }
+.badge.ok { background: var(--success); color: var(--success-ink); }
+.hl { outline: 2px solid var(--primary); }
+.empty { text-align: center; padding: 30px 15px; color: var(--mute); }
+.summary { background: var(--success); color: var(--success-ink); text-align: center; font-weight: 800; font-size: 18px; }
+.mv-tbl { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.mv-tbl th, .mv-tbl td { border: 1px solid var(--line); padding: 4px; text-align: center; }
+.mv-tbl td.l { text-align: right; color: var(--mute); }
+details summary { cursor: pointer; font-weight: 800; font-size: 12px; margin-top: 8px; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.stack .btn { width: 100%; }
