@@ -23,6 +23,10 @@ async function renderHome() {
   const view = $('view-home');
   view.style.display = 'block';
   
+  // إخفاء الكارت السفلي عند إعادة الرسم
+  const oldBar = $('selectionBar');
+  if (oldBar) oldBar.remove();
+
   if (state.subscribers.length === 0) {
     state.subscribers = await db.subscribers.toArray();
     state.buildings = {};
@@ -136,7 +140,7 @@ async function renderHome() {
             await db.subscribers.update(c.dataset.key, { dueAmount: 0, count: 0 });
             await db.movements.add({ key: c.dataset.key, type: 'pay', amount: Number(c.dataset.due), count: Number(c.dataset.count), date: new Date().toISOString(), printed: false });
           }
-          bar.remove();
+          bar.remove(); // إخفاء الكارت فوراً
           state.subscribers = []; 
           showReceipt(receipts);
           renderHome();
@@ -270,25 +274,54 @@ async function renderLedger() {
   const view = $('view-ledger');
   const moves = await db.movements.toArray();
   if (moves.length === 0) { view.innerHTML = `<div class="card" style="text-align:center; padding:20px;">لا توجد عمليات مسجلة حتى الآن.</div>`; return; }
+  
   moves.sort((a,b) => new Date(b.date) - new Date(a.date));
   const today = new Date().toDateString();
   const todayTotal = moves.filter(m => new Date(m.date).toDateString() === today).reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  
   let html = `<div class="card" style="background:var(--success); color:white; text-align:center; font-weight:bold; font-size:18px;">إجمالي تحصيل اليوم: ${todayTotal} ج</div>`;
   html += `<div style="margin-bottom:15px;"><button id="btnExport" style="width:100%; padding:12px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:bold;">📤 تصدير الأرشيف للأدمن</button></div>`;
   html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
+  
   for (let m of moves) {
     const sub = await db.subscribers.get(m.key);
     const name = sub ? sub.name : 'غير معروف';
-    html += `<div class="card" style="padding:12px; margin:0;"><div style="display:flex; justify-content:space-between; align-items:center;"><div><div style="font-weight:800; font-size:14px;">${name}</div><div style="font-size:12px; color:var(--mute); margin-top:4px;">${m.key} · ${m.type === 'pay' ? 'تحصيل' : 'قراءة'}</div><div style="font-size:12px; color:var(--mute); margin-top:2px;">${new Date(m.date).toLocaleString('ar-EG')}</div></div><div style="text-align:left;"><div style="font-weight:800; color:var(--primary); font-size:16px;">${m.amount || m.estimatedInvoice || 0} ج</div></div></div><div style="margin-top:10px; display:flex; gap:10px;">${m.type === 'pay' ? `<button class="btn-print" data-id="${m.id}" data-key="${m.key}" data-amount="${m.amount}" style="flex:1; padding:6px; background:var(--primary); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">طباعة</button>` : ''}</div></div>`;
+    
+    // التحقق من وجود قراءة لهذا العميل
+    const hasReading = await db.movements.where({ key: m.key }).filter(x => x.reading).first();
+    const readBtnText = hasReading ? 'تعديل القراءة' : 'قراءة العداد';
+    const readBtnColor = hasReading ? 'var(--success)' : 'var(--primary)';
+
+    html += `
+      <div class="card" style="padding:12px; margin:0;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight:800; font-size:14px;">${name}</div>
+            <div style="font-size:12px; color:var(--mute); margin-top:4px;">${m.key} · ${m.type === 'pay' ? 'تحصيل' : 'قراءة'}</div>
+            <div style="font-size:12px; color:var(--mute); margin-top:2px;">${new Date(m.date).toLocaleString('ar-EG')}</div>
+          </div>
+          <div style="text-align:left;">
+            <div style="font-weight:800; color:var(--primary); font-size:16px;">${m.amount || m.estimatedInvoice || 0} ج</div>
+          </div>
+        </div>
+        
+        <div style="margin-top:10px; display:flex; gap:10px;">
+          ${m.type === 'pay' ? `<button class="btn-print" data-id="${m.id}" data-key="${m.key}" data-amount="${m.amount}" style="flex:1; padding:6px; background:var(--primary); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">طباعة</button>` : ''}
+          <button class="btn-read-ledger" data-key="${m.key}" style="flex:1; padding:6px; background:${readBtnColor}; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">${readBtnText}</button>
+        </div>
+      </div>
+    `;
   }
   html += `</div>`;
   view.innerHTML = html;
+
   $('btnExport').onclick = () => {
     const archiveData = { collector: 'محصل', date: new Date().toISOString(), movements: moves };
     const blob = new Blob([JSON.stringify(archiveData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `archive_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
   };
+
   document.querySelectorAll('.btn-print').forEach(btn => {
     btn.onclick = async () => {
       const id = Number(btn.dataset.id);
@@ -298,6 +331,23 @@ async function renderLedger() {
         showReceipt([{ key: move.key, name: sub ? sub.name : 'غير معروف', amount: move.amount, count: move.count }]);
         await db.movements.update(id, { printed: true });
       }
+    };
+  });
+
+  // ربط أزرار القراءة في صفحة الأرشيف
+  document.querySelectorAll('.btn-read-ledger').forEach(btn => {
+    btn.onclick = async () => {
+      const key = btn.dataset.key;
+      const sub = await db.subscribers.get(key);
+      if (!sub) return alert('لم يتم العثور على العميل');
+      
+      const url = `reading.html?k=${encodeURIComponent(key)}&n=${encodeURIComponent(sub.name)}&a="قطاع ${sub.sector} بلوك ${sub.blk} عمارة ${sub.bld} شقة ${sub.apt}"&p=${sub.prevReading}&m=${sub.months || 1}`;
+      const d = document.createElement('dialog');
+      d.style.cssText = 'width:95vw; height:90vh; max-width:420px; padding:0; border:none; border-radius:16px; overflow:hidden; background:transparent;';
+      d.innerHTML = `<iframe src="${url}" style="width:100%; height:100%; border:none;"></iframe>`;
+      document.body.appendChild(d); d.showModal();
+      const handleMessage = (e) => { if (e.data && e.data.type === 'READING_SAVED') { d.close(); d.remove(); window.removeEventListener('message', handleMessage); state.subscribers = []; renderLedger(); } };
+      window.addEventListener('message', handleMessage);
     };
   });
 }
