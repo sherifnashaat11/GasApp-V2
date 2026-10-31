@@ -1,18 +1,54 @@
-const CACHE_NAME = 'gas-v2-cache-v18';
+const CACHE_NAME = 'gas-v2-cache-v40'; // قمنا بتغيير الرقم
 const ASSETS = [
-  './index.html', './app.js', './style.css', './dexie.min.js', './reading.html',
-  './shared/db.js', './shared/subscriber-key.js'
+  './index.html',
+  './app.js',
+  './importer.js',
+  './reading.html',
+  './style.css',
+  './dexie.min.js',
+  '../shared/db.js'
 ];
 
+// تثبيت الـ Service Worker وتخزين الملفات
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      // استخدام Promise.allSettled لتجاهل أي ملف غير موجود بدلاً من إيقاف العملية
+      return Promise.allSettled(
+        ASSETS.map(url => cache.add(url))
+      );
+    }).then(() => self.skipWaiting())
+  );
 });
 
+// تفعيله وتنظيف الكاش القديم
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(key => key !== CACHE_NAME ? caches.delete(key) : null))).then(() => self.clients.claim()));
+  e.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
+// استراتيجية الجلب: Cache First (لتسريع التطبيق)
 self.addEventListener('fetch', (e) => {
-  if (e.request.url.includes('/downloads/') || e.request.url.includes('/api/')) return;
-  e.respondWith(caches.match(e.request).then(cached => cached || fetch(e.request)));
+  // تجاهل طلبات الـ API أو الملفات المشفرة
+  if (e.request.url.includes('/downloads/') || e.request.url.includes('/api/')) {
+    return;
+  }
+
+  e.respondWith(
+    caches.match(e.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(e.request);
+    })
+  );
 });
