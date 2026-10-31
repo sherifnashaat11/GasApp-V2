@@ -18,35 +18,17 @@ function switchTab(tab) {
   if (tab === 'ledger') renderLedger(); 
 }
 
+// ======================= شاشة التحصيل =======================
 async function renderHome() {
   const view = $('view-home');
   view.style.display = 'block';
   
-  const count = await db.subscribers.count();
-  if (count === 0) {
-    view.innerHTML = `
-      <div class="card" style="text-align:center; padding: 40px 15px;">
-        <h2 style="margin-bottom: 10px; font-size: 18px;">مرحباً بك</h2>
-        <p style="color: var(--mute); margin-bottom: 20px; font-size: 14px;">لا توجد بيانات. يرجى تحديث الملف للبدء.</p>
-        <button id="btnFetch" style="background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer;">📥 تحديث الملف</button>
-        <div id="fetchProgress" style="margin-top: 15px; font-size: 13px; color: var(--primary); font-weight: bold; display: none;"></div>
-      </div>`;
-    $('btnFetch').onclick = async () => {
-      const btn = $('btnFetch'); const prog = $('fetchProgress');
-      btn.disabled = true; btn.style.opacity = '0.5'; prog.style.display = 'block';
-      try {
-        await importFromServer(msg => prog.textContent = msg);
-        renderHome();
-      } catch (err) { alert(err.message); btn.disabled = false; btn.style.opacity = '1'; prog.style.display = 'none'; }
-    };
-    return;
-  }
-
+  // جلب البيانات إذا كانت فارغة
   if (state.subscribers.length === 0) {
     state.subscribers = await db.subscribers.toArray();
     state.buildings = {};
     state.subscribers.forEach(s => {
-      if (s.dueAmount <= 0) return; // استبعاد المسددين
+      if (Number(s.dueAmount) <= 0) return; // استبعاد المسددين
       const secStr = String(s.sector).padStart(2, '0');
       const blkStr = String(s.blk).padStart(2, '0');
       const bldStr = String(s.bld).padStart(2, '0');
@@ -58,22 +40,25 @@ async function renderHome() {
     });
   }
 
+  if (state.subscribers.length === 0) {
+    view.innerHTML = `<div class="card" style="text-align:center; padding: 40px 15px;"><h2>لا توجد بيانات</h2><button id="btnFetch" style="margin-top:10px; padding:10px; background:var(--primary); color:white; border:none; border-radius:8px;">📥 تحديث الملف</button></div>`;
+    $('btnFetch').onclick = async () => { await importFromServer(console.log); state.subscribers = []; renderHome(); };
+    return;
+  }
+
   const moves = await db.movements.toArray();
   const movesMap = new Map(moves.map(m => [m.key, m]));
 
-  const secs = [...new Set(state.subscribers.filter(s => s.dueAmount > 0).map(s => String(s.sector).padStart(2, '0')))].sort();
-  const blks = [...new Set(state.subscribers.filter(s => s.dueAmount > 0 && String(s.sector).padStart(2, '0') === state.sector).map(s => String(s.blk).padStart(2, '0')))].sort();
-  const blds = [...new Set(state.subscribers.filter(s => s.dueAmount > 0 && String(s.sector).padStart(2, '0') === state.sector && String(s.blk).padStart(2, '0') === state.blk).map(s => String(s.bld).padStart(2, '0')))].sort();
+  const secs = [...new Set(state.subscribers.filter(s => Number(s.dueAmount) > 0).map(s => String(s.sector).padStart(2, '0')))].sort();
+  const blks = [...new Set(state.subscribers.filter(s => Number(s.dueAmount) > 0 && String(s.sector).padStart(2, '0') === state.sector).map(s => String(s.blk).padStart(2, '0')))].sort();
+  const blds = [...new Set(state.subscribers.filter(s => Number(s.dueAmount) > 0 && String(s.sector).padStart(2, '0') === state.sector && String(s.blk).padStart(2, '0') === state.blk).map(s => String(s.bld).padStart(2, '0')))].sort();
   
   let html = `
     <div class="card" style="padding: 10px; display: flex; flex-direction: column; gap: 10px;">
       <div style="display: flex; gap: 10px;">
-        <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">القطاع</label>
-          <select id="selSector" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); margin-top:5px;">${secs.map(s => `<option value="${s}" ${s === state.sector ? 'selected' : ''}>قطاع ${s}</option>`).join('')}</select></div>
-        <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">البلوك</label>
-          <select id="selBlk" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); margin-top:5px;">${blks.map(b => `<option value="${b}" ${b === state.blk ? 'selected' : ''}>بلوك ${b}</option>`).join('')}</select></div>
-        <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">العمارة</label>
-          <select id="selBld" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); margin-top:5px;"><option value="">-- كل العمارات --</option>${blds.map(b => `<option value="${b}" ${b === state.bld ? 'selected' : ''}>عمارة ${b}</option>`).join('')}</select></div>
+        <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">القطاع</label><select id="selSector" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line);">${secs.map(s => `<option value="${s}" ${s === state.sector ? 'selected' : ''}>قطاع ${s}</option>`).join('')}</select></div>
+        <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">البلوك</label><select id="selBlk" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line);">${blks.map(b => `<option value="${b}" ${b === state.blk ? 'selected' : ''}>بلوك ${b}</option>`).join('')}</select></div>
+        <div style="flex:1;"><label style="font-size:12px; font-weight:bold;">العمارة</label><select id="selBld" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line);"><option value="">-- كل العمارات --</option>${blds.map(b => `<option value="${b}" ${b === state.bld ? 'selected' : ''}>عمارة ${b}</option>`).join('')}</select></div>
       </div>
     </div>
   `;
@@ -98,10 +83,10 @@ async function renderHome() {
         <div style="display:flex; flex-direction:column; gap:8px;">
           ${bldData.apts.sort((a,b)=> String(a.apt).localeCompare(String(b.apt))).map((apt, idx) => {
             const hasReading = movesMap.has(apt.key);
-            const due = apt.dueAmount || 0;
+            const due = Number(apt.dueAmount) || 0;
             return `<div style="background: var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; display:flex; justify-content:space-between; align-items:center;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <input type="checkbox" class="chk-apt" data-key="${apt.key}" data-due="${due}" style="width:18px; height:18px;">
+                  <input type="checkbox" class="chk-apt" data-key="${apt.key}" data-due="${due}" data-count="${apt.count}" data-name="${apt.name}" style="width:18px; height:18px;">
                   <div>
                     <div style="font-weight:800; font-size:14px; display:flex; align-items:center; gap:5px;">${apt.name} ${hasReading ? '✅' : ''}</div>
                     <div style="font-size:12px; color:var(--mute); margin-top:4px;">شقة ${String(apt.apt).padStart(2, '0')} · ${apt.count || 0} فاتورة</div>
@@ -109,7 +94,7 @@ async function renderHome() {
                   </div>
                 </div>
                 <div style="display:flex; gap:5px;">
-                  <button data-key="${apt.key}" class="btn-pay" style="background:#d97706; color:white; border:none; padding:6px 10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;">تحصيل</button>
+                  <button data-key="${apt.key}" data-due="${due}" data-count="${apt.count}" data-name="${apt.name}" class="btn-pay" style="background:#d97706; color:white; border:none; padding:6px 10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;">تحصيل</button>
                   <button data-key="${apt.key}" data-name="${apt.name}" data-addr="قطاع ${state.sector} بلوك ${state.blk} عمارة ${targetBld} شقة ${String(apt.apt).padStart(2, '0')}" data-prev="${apt.prevReading}" data-months="${apt.months || 1}" class="btn-read" style="background:${hasReading ? 'var(--success)' : 'var(--primary)'}; color:white; border:none; padding:6px 10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;">${hasReading ? 'تعديل' : 'قراءة'}</button>
                 </div>
               </div>`;
@@ -120,7 +105,7 @@ async function renderHome() {
     view.innerHTML = html;
     $('btnBack').onclick = () => { state.openBld = null; state.bld = ''; renderHome(); };
     
-    // تحديد الكل
+    // --- التحديد الجماعي ---
     $('btnSelectAll').onclick = () => {
       const chks = document.querySelectorAll('.chk-apt');
       const allChecked = Array.from(chks).every(c => c.checked);
@@ -128,7 +113,6 @@ async function renderHome() {
       updateSelectionBar();
     };
 
-    // تحديث الكارت السفلي
     function updateSelectionBar() {
       const selected = document.querySelectorAll('.chk-apt:checked');
       let selTotal = 0;
@@ -144,58 +128,110 @@ async function renderHome() {
       
       if (selected.length > 0) {
         bar.style.display = 'block';
-        bar.innerHTML = `
-          <div style="font-weight:bold; margin-bottom:10px;">المحدد: ${selected.length} شقة · الإجمالي: ${selTotal} ج</div>
-          <button id="btnPayBulk" style="width:100%; background:var(--success); color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; font-size:16px;">سداد المحدد (${selTotal} ج)</button>
-        `;
+        bar.innerHTML = `<div style="font-weight:bold; margin-bottom:10px;">المحدد: ${selected.length} شقة · الإجمالي: ${selTotal} ج</div><button id="btnPayBulk" style="width:100%; background:var(--success); color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; font-size:16px;">سداد المحدد</button>`;
+        
         $('btnPayBulk').onclick = async () => {
-          if(!confirm('تأكيد تحصيل المبلغ المحدد؟')) return;
+          if(!confirm('تأكيد السداد الجماعي؟')) return;
+          const receipts = [];
           for (let c of selected) {
+            receipts.push({ key: c.dataset.key, name: c.dataset.name, amount: Number(c.dataset.due), count: Number(c.dataset.count) });
             await db.subscribers.update(c.dataset.key, { dueAmount: 0, count: 0 });
+            await db.movements.add({ key: c.dataset.key, type: 'pay', amount: Number(c.dataset.due), count: Number(c.dataset.count), date: new Date().toISOString(), printed: false });
           }
           bar.remove();
-          state.subscribers = []; // لإعادة تحميل البيانات
+          state.subscribers = []; // إعادة تحميل
+          showReceipt(receipts);
           renderHome();
         };
       } else {
         bar.style.display = 'none';
       }
     }
-
     document.querySelectorAll('.chk-apt').forEach(c => c.onchange = updateSelectionBar);
 
-    // أزرار التحصيل الفردي (سيتم برمجة النافذة المنبثقة هنا لاحقاً)
+    // --- السداد الفردي ---
     document.querySelectorAll('.btn-pay').forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm('تأكيد تحصيل كامل المديونية لهذه الشقة؟')) return;
-        await db.subscribers.update(btn.dataset.key, { dueAmount: 0, count: 0 });
-        state.subscribers = []; // لإعادة تحميل البيانات
-        renderHome();
+        const due = Number(btn.dataset.due);
+        const count = Number(btn.dataset.count);
+        const key = btn.dataset.key;
+        const name = btn.dataset.name;
+
+        // إذا كانت فاتورة واحدة -> سداد كلي
+        if (count <= 1) {
+          if (!confirm('تأكيد سداد المديونية بالكامل؟')) return;
+          await db.subscribers.update(key, { dueAmount: 0, count: 0 });
+          await db.movements.add({ key: key, type: 'pay', amount: due, count: 1, date: new Date().toISOString(), printed: false });
+          state.subscribers = [];
+          showReceipt([{ key, name, amount: due, count: 1 }]);
+          renderHome();
+          return;
+        }
+
+        // إذا كانت أكثر من فاتورة -> نافذة السداد الجزئي
+        const d = document.createElement('dialog');
+        d.style.cssText = 'padding:20px; border-radius:12px; text-align:center; max-width:350px;';
+        d.innerHTML = `
+          <h3 style="margin-bottom:15px;">سداد شقة ${name}</h3>
+          <p style="margin-bottom:15px; font-weight:bold; color:var(--danger);">إجمالي المديونية: ${due} ج (${count} فواتير)</p>
+          
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px;">
+            <button id="payFull" style="padding:10px; background:var(--success); color:white; border:none; border-radius:8px; font-weight:bold;">سداد كلي (${due} ج)</button>
+            <button id="payPartial" style="padding:10px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:bold;">سداد جزئي</button>
+          </div>
+          <div id="partialInputs" style="display:none; gap:10px; margin-bottom:15px;">
+            <input id="pCount" type="number" placeholder="عدد الفواتير" style="width:100%; padding:8px; margin-bottom:5px; border:1px solid var(--line); border-radius:6px; text-align:center;">
+            <input id="pAmount" type="number" placeholder="القيمة المدفوعة" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; text-align:center;">
+            <button id="confirmPartial" style="width:100%; padding:8px; margin-top:5px; background:var(--success); color:white; border:none; border-radius:6px; font-weight:bold;">تأكيد الدفع</button>
+          </div>
+          <button id="cancelBtn" style="width:100%; padding:10px; background:transparent; border:1px solid var(--line); border-radius:8px;">إلغاء</button>
+        `;
+        document.body.appendChild(d);
+        d.showModal();
+
+        d.querySelector('#cancelBtn').onclick = () => { d.close(); d.remove(); };
+        d.querySelector('#payFull').onclick = async () => {
+          await db.subscribers.update(key, { dueAmount: 0, count: 0 });
+          await db.movements.add({ key: key, type: 'pay', amount: due, count: count, date: new Date().toISOString(), printed: false });
+          d.close(); d.remove(); state.subscribers = [];
+          showReceipt([{ key, name, amount: due, count: count }]);
+          renderHome();
+        };
+        d.querySelector('#payPartial').onclick = () => { d.querySelector('#partialInputs').style.display = 'flex'; d.querySelector('#payPartial').style.display = 'none'; };
+        d.querySelector('#confirmPartial').onclick = async () => {
+          const pCount = Number(d.querySelector('#pCount').value);
+          const pAmount = Number(d.querySelector('#pAmount').value);
+          if (pCount <= 0 || pAmount <= 0 || pCount > count || pAmount > due) return alert('بيانات غير صحيحة');
+          
+          await db.subscribers.update(key, { dueAmount: due - pAmount, count: count - pCount });
+          await db.movements.add({ key: key, type: 'pay', amount: pAmount, count: pCount, date: new Date().toISOString(), printed: false, partial: true });
+          d.close(); d.remove(); state.subscribers = [];
+          showReceipt([{ key, name, amount: pAmount, count: pCount }]);
+          renderHome();
+        };
       };
     });
 
+    // --- القراءة ---
     document.querySelectorAll('.btn-read').forEach(btn => {
       btn.onclick = () => {
         const url = `reading.html?k=${encodeURIComponent(btn.dataset.key)}&n=${encodeURIComponent(btn.dataset.name)}&a=${encodeURIComponent(btn.dataset.addr)}&p=${btn.dataset.prev}&m=${btn.dataset.months}`;
         const d = document.createElement('dialog');
         d.style.cssText = 'width:95vw; height:90vh; max-width:420px; padding:0; border:none; border-radius:16px; overflow:hidden; background:transparent;';
         d.innerHTML = `<iframe src="${url}" style="width:100%; height:100%; border:none;"></iframe>`;
-        document.body.appendChild(d);
-        d.showModal();
-        const handleMessage = (e) => {
-          if (e.data && e.data.type === 'READING_SAVED') { d.close(); d.remove(); window.removeEventListener('message', handleMessage); state.subscribers = []; renderHome(); }
-        };
+        document.body.appendChild(d); d.showModal();
+        const handleMessage = (e) => { if (e.data && e.data.type === 'READING_SAVED') { d.close(); d.remove(); window.removeEventListener('message', handleMessage); state.subscribers = []; renderHome(); } };
         window.addEventListener('message', handleMessage);
       };
     });
   } else {
+    // عرض العمارات
     const blds = Object.keys(state.buildings).filter(k => k.startsWith(`${state.sector}|${state.blk}|`)).map(k => ({ key: k, ...state.buildings[k] })).sort((a,b) => String(a.bld).localeCompare(String(b.bld)));
     html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
     blds.forEach((b, idx) => {
       const totalDue = b.apts.reduce((sum, a) => sum + (Number(a.dueAmount) || 0), 0); 
-      const readCount = b.apts.filter(a => movesMap.has(a.key)).length;
       html += `<div class="bld-card" data-bld="${b.bld}" style="background: color-mix(in srgb, var(--primary) ${[0,3,6,9][idx%4]}%, var(--card)); border:1px solid var(--line); border-right: 5px solid var(--primary); border-radius:10px; padding:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-          <div><div style="font-weight:800; font-size:15px;">عمارة ${b.bld}</div><div style="font-size:12px; color:var(--mute); margin-top:4px;">${b.apts.length} شقة · تم قراءة ${readCount}</div></div>
+          <div><div style="font-weight:800; font-size:15px;">عمارة ${b.bld}</div></div>
           <div style="font-weight:800; color:var(--danger); font-size:15px;">${totalDue} ج</div></div>`;
     });
     html += `</div>`;
@@ -210,6 +246,34 @@ async function renderHome() {
   }
 }
 
+// ======================= دالة الإيصال (تجريبي) =======================
+function showReceipt(receipts) {
+  let html = `<div style="font-family: Tahoma; text-align:center; padding: 20px; direction: rtl;">`;
+  html += `<h2 style="margin-bottom:10px;">🧾 إيصال تحصيل</h2>`;
+  html += `<p>التاريخ: ${new Date().toLocaleString('ar-EG')}</p>`;
+  html += `<table style="width:100%; border-collapse:collapse; margin-top:15px; font-size:14px;">`;
+  html += `<tr style="background:#eee;"><th style="border:1px solid #ccc; padding:8px;">الاسم</th><th style="border:1px solid #ccc; padding:8px;">المبلغ</th></tr>`;
+  
+  let total = 0;
+  receipts.forEach(r => {
+    total += r.amount;
+    html += `<tr><td style="border:1px solid #ccc; padding:8px;">${r.name}</td><td style="border:1px solid #ccc; padding:8px;">${r.amount} ج</td></tr>`;
+  });
+  
+  html += `<tr style="font-weight:bold; background:#e0f2fe;"><td style="border:1px solid #ccc; padding:8px;">الإجمالي</td><td style="border:1px solid #ccc; padding:8px;">${total} ج</td></tr>`;
+  html += `</table>`;
+  html += `<button onclick="window.print()" style="margin-top:20px; padding:10px 20px; background:#0f2438; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">🖨️ طباعة</button>`;
+  html += `</div>`;
+
+  const d = document.createElement('dialog');
+  d.style.cssText = 'padding:0; border:none; border-radius:12px; overflow:hidden; max-width:400px; width:90vw;';
+  d.innerHTML = html;
+  document.body.appendChild(d);
+  d.showModal();
+  d.addEventListener('close', () => d.remove());
+}
+
+// ======================= شاشة ما تم تحصيله (الأرشيف) =======================
 async function renderLedger() {
   const view = $('view-ledger');
   const moves = await db.movements.toArray();
@@ -221,13 +285,17 @@ async function renderLedger() {
 
   moves.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-  let html = `<div style="margin-bottom:15px;"><button id="btnExport" style="width:100%; padding:12px; background:var(--success); color:white; border:none; border-radius:8px; font-weight:bold; font-size:16px;">📤 تصدير الأرشيف للأدمن</button></div>`;
+  // حساب إجمالي اليوم
+  const today = new Date().toDateString();
+  const todayTotal = moves.filter(m => new Date(m.date).toDateString() === today).reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
+  let html = `<div class="card" style="background:var(--success); color:white; text-align:center; font-weight:bold; font-size:18px;">إجمالي تحصيل اليوم: ${todayTotal} ج</div>`;
+  html += `<div style="margin-bottom:15px;"><button id="btnExport" style="width:100%; padding:12px; background:var(--primary); color:white; border:none; border-radius:8px; font-weight:bold;">📤 تصدير الأرشيف للأدمن</button></div>`;
   html += `<div style="display:flex; flex-direction:column; gap:10px;">`;
 
   for (let m of moves) {
     const sub = await db.subscribers.get(m.key);
     const name = sub ? sub.name : 'غير معروف';
-    const isPrinted = m.printed ? '✅ مطبوعة' : '⏳ غير مطبوعة';
     
     html += `
       <div class="card" style="padding:12px; margin:0;">
@@ -239,12 +307,10 @@ async function renderLedger() {
           </div>
           <div style="text-align:left;">
             <div style="font-weight:800; color:var(--primary); font-size:16px;">${m.amount || m.estimatedInvoice || 0} ج</div>
-            <div style="font-size:11px; color:var(--mute); margin-top:5px;">${isPrinted}</div>
           </div>
         </div>
         <div style="margin-top:10px; display:flex; gap:10px;">
-          ${!m.printed ? `<button class="btn-undo" data-id="${m.id}" style="flex:1; padding:6px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">تراجع</button>` : ''}
-          <button class="btn-print" data-id="${m.id}" style="flex:1; padding:6px; background:var(--primary); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">طباعة</button>
+          ${m.type === 'pay' ? `<button class="btn-print" data-id="${m.id}" data-key="${m.key}" data-amount="${m.amount}" style="flex:1; padding:6px; background:var(--primary); color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">طباعة</button>` : ''}
         </div>
       </div>
     `;
@@ -259,34 +325,14 @@ async function renderLedger() {
     const a = document.createElement('a'); a.href = url; a.download = `archive_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
   };
 
-  document.querySelectorAll('.btn-undo').forEach(btn => {
-    btn.onclick = async () => {
-      if (!confirm('هل أنت متأكد من التراجع عن هذه العملية؟')) return;
-      const id = Number(btn.dataset.id);
-      const move = await db.movements.get(id);
-      if (move) {
-        // استرجاع المديونية والعدد
-        const sub = await db.subscribers.get(move.key);
-        if (sub) {
-           const restoredDue = (Number(sub.dueAmount) || 0) + (Number(move.amount) || 0);
-           const restoredCount = (Number(sub.count) || 0) + (Number(move.count) || 0);
-           await db.subscribers.update(move.key, { dueAmount: restoredDue, count: restoredCount });
-        }
-        await db.movements.delete(id);
-        state.subscribers = []; // لتحديث الشاشة الرئيسية
-        renderLedger();
-      }
-    };
-  });
-
   document.querySelectorAll('.btn-print').forEach(btn => {
     btn.onclick = async () => {
       const id = Number(btn.dataset.id);
       const move = await db.movements.get(id);
       if (move) {
+        const sub = await db.subscribers.get(move.key);
+        showReceipt([{ key: move.key, name: sub ? sub.name : 'غير معروف', amount: move.amount, count: move.count }]);
         await db.movements.update(id, { printed: true });
-        alert('سيتم فتح صفحة الطباعة (قيد التطوير)');
-        renderLedger();
       }
     };
   });
