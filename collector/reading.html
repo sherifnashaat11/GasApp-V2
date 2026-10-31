@@ -6,25 +6,21 @@
 <title>قراءة العداد</title>
 <script src="dexie.min.js"></script>
 <style>
-  :root { --primary: #7c3aed; --bg: #f4f7fa; --card: #ffffff; --ink: #0c2233; --line: #d3dde4; --mute: #5b6f7d; --success: #0d9668; }
+  :root { --primary: #7c3aed; --bg: #f4f7fa; --card: #ffffff; --ink: #0c2233; --line: #d3dde4; --mute: #5b6f7d; --success: #0d9668; --danger: #d63a3a; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100dvh; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI', Tahoma, sans-serif; }
   .app-container { display: flex; flex-direction: column; height: 100%; max-width: 420px; margin: 0 auto; padding: 15px; }
   .header-info { text-align: center; margin-bottom: 10px; }
   .header-info h1 { font-size: 1.2rem; color: var(--primary); font-weight: 800; }
   .header-info p { font-size: 0.85rem; color: var(--mute); margin-top: 5px; line-height: 1.4; }
-  
   .form-group { background: var(--card); padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
   label { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; display: block; }
   input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.5rem; font-weight: 800; text-align: center; color: var(--primary); font-family: inherit; background: var(--bg); direction: ltr; }
   input:focus { outline: none; border-color: var(--primary); }
-  
   .meta-row { display: flex; justify-content: space-between; background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; font-weight: bold; margin-bottom: 5px; }
-  
   .calc-box { background: var(--bg); border-radius: 10px; padding: 12px; border: 1px solid var(--line); margin-top: 5px; }
   .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-bottom: 6px; }
   .calc-row.total { font-size: 18px; color: var(--success); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
-
   .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
   button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: 0.2s; }
   #saveBtn { background: var(--primary); color: #fff; }
@@ -40,8 +36,8 @@
   
   <div class="form-group">
     <div class="meta-row">
-      <span>أشهر المحاسبة: <span id="monthsDisplay" style="color:var(--primary);">1</span></span>
       <span>القراءة السابقة: <span id="prevReadDisplay" style="color:var(--primary);">0</span></span>
+      <span>المديونية: <span id="dueDisplay" style="color:var(--danger);">0</span> ج</span>
     </div>
 
     <div>
@@ -51,7 +47,8 @@
     
     <div class="calc-box">
       <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 m³</span></div>
-      <div class="calc-row total"><span>إجمالي الفاتورة:</span><span id="invoiceVal">0 ج.م</span></div>
+      <div class="calc-row"><span>الفاتورة التقديرية:</span><span id="invoiceVal">0 ج.م</span></div>
+      <div class="calc-row total"><span>إجمالي المطلوب:</span><span id="totalVal">0 ج.م</span></div>
     </div>
   </div>
 
@@ -62,139 +59,92 @@
 </div>
 
 <script type="module">
+  import { db } from '../shared/db.js';
 
-import { db } from '../shared/db.js';
   const p = new URLSearchParams(location.search);
   const key = p.get('k');
   const name = p.get('n') || 'بدون اسم';
   const addr = p.get('a') || '';
   const prevReading = Number(p.get('p')) || 0;
-  const billingMonths = Number(p.get('m')) || 1;
+  const billingMonths = Number(p.get('m')) || 1; 
 
   document.getElementById('clientInfo').innerHTML = `<b>${name}</b><br>${addr}`;
   document.getElementById('prevReadDisplay').textContent = prevReading;
-  document.getElementById('monthsDisplay').textContent = billingMonths;
+  
+  let currentDue = 0;
 
-  // ============================================================
-  // المنطق المحاسبي (الأسعار الحقيقية)
-  // ============================================================
-  const DEFAULT_PERIODS = [
-    { date:'2016-11-01', tiers:[{name:'الأولى',limit:30,price:0.75},{name:'الثانية',limit:60,price:1.50},{name:'الثالثة',limit:null,price:2.00}] },
-    { date:'2017-07-01', tiers:[{name:'الأولى',limit:30,price:1.00},{name:'الثانية',limit:60,price:1.75},{name:'الثالثة',limit:null,price:2.50}] },
-    { date:'2018-08-01', tiers:[{name:'الأولى',limit:30,price:1.75},{name:'الثانية',limit:60,price:2.50},{name:'الثالثة',limit:null,price:3.15}] },
-    { date:'2019-07-01', tiers:[{name:'الأولى',limit:30,price:2.35},{name:'الثانية',limit:60,price:3.10},{name:'الثالثة',limit:null,price:3.60}] },
-    { date:'2021-10-01', tiers:[{name:'الأولى',limit:30,price:2.50},{name:'الثانية',limit:60,price:3.25},{name:'الثالثة',limit:null,price:3.75}] },
-    { date:'2024-09-01', tiers:[{name:'الأولى',limit:30,price:3.00},{name:'الثانية',limit:60,price:4.00},{name:'الثالثة',limit:null,price:5.00}] },
-    { date:'2025-06-01', tiers:[{name:'الأولى',limit:30,price:4.00},{name:'الثانية',limit:60,price:5.00},{name:'الثالثة',limit:null,price:6.00}] },
-    { date:'2025-10-01', tiers:[{name:'الأولى',limit:30,price:5.00},{name:'الثانية',limit:60,price:6.00},{name:'الثالثة',limit:null,price:9.00}] },
-    { date:'2026-03-01', tiers:[{name:'الأولى',limit:30,price:6.00},{name:'الثانية',limit:60,price:8.00},{name:'الثالثة',limit:null,price:12.00}] }
-  ];
+  // أسعار الشرائح
+  const REAL_PRICES = { fees: 18, tiers: [{ limit: 30, price: 6 }, { limit: 60, price: 8 }, { limit: null, price: 12 }] };
 
-  const FEES = 18;
-  function smartFmt(val){ const num = Number(val) || 0; if (Number.isInteger(num)) return num.toLocaleString('en-US'); return num.toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:2}); }
-  function parseDate(s){ const parts = String(s).split('-'); return { y: Number(parts[0])||2026, m: Number(parts[1])||1 }; }
-  function mIdx(y,m){ return y*12+(m-1); }
-
-  function monthlyCostDetailed(cons, tiers){
-    let rem = Number(cons) || 0; let cost = 0; let prev = 0;
-    for (let i=0; i<tiers.length; i++){
-      if (rem <= 0) break;
-      const t = tiers[i];
-      let cap = (t.limit === null) ? rem : Math.max(0, Number(t.limit) - prev);
-      const used = Math.min(rem, cap);
-      cost += used * Number(t.price);
-      rem -= used;
-      if (t.limit !== null) prev = Number(t.limit);
+  async function init() {
+    if (!key) return alert('خطأ: لم يتم تمرير كود العميل');
+    const sub = await db.subscribers.get(key);
+    if (sub) {
+      currentDue = Number(sub.dueAmount) || 0;
+      document.getElementById('dueDisplay').textContent = currentDue;
     }
-    return cost;
+    
+    const move = await db.movements.where({ key: key }).first();
+    if (move && move.reading) {
+      document.getElementById('v').value = move.reading;
+      calculate(move.reading);
+    }
   }
 
-  function calculateInvoice(currentReading) {
-    const cons = Math.max(0, currentReading - prevReading);
-    const avg = cons / billingMonths; 
-    const now = new Date();
-    const targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const aEnd = mIdx(targetDate.getFullYear(), targetDate.getMonth() + 1);
-    const aStart = aEnd - billingMonths + 1;
+  function calculate(currentReading) {
+    const consumption = Math.max(0, currentReading - prevReading);
+    document.getElementById('consumptionVal').textContent = `${consumption} m³`;
+    
+    let remaining = consumption;
+    let total = 0;
+    let prevLimit = 0;
 
-    const sorted = [...DEFAULT_PERIODS].sort((a,b)=> a.date.localeCompare(b.date));
-    let totalConsumptionCost = 0;
-
-    for (let i=0; i<sorted.length; i++){
-      const pDate = parseDate(sorted[i].date);
-      const start = (i === 0) ? -Infinity : mIdx(pDate.y, pDate.m);
-      const nextPDate = (i < sorted.length - 1) ? parseDate(sorted[i+1].date) : null;
-      const end = nextPDate === null ? Infinity : mIdx(nextPDate.y, nextPDate.m) - 1;
-      
-      const s = Math.max(start, aStart);
-      const e = Math.min(end, aEnd);
-      const overlap = Math.max(0, e - s + 1);
-      
-      if (overlap === 0) continue;
-      const monthlyCost = monthlyCostDetailed(avg, sorted[i].tiers);
-      totalConsumptionCost += (overlap * monthlyCost);
+    for (let i = 0; i < REAL_PRICES.tiers.length; i++) {
+      if (remaining <= 0) break;
+      const tier = REAL_PRICES.tiers[i];
+      let cap = (tier.limit === null) ? remaining : Math.max(0, tier.limit - prevLimit);
+      const used = Math.min(remaining, cap);
+      total += used * tier.price;
+      remaining -= used;
+      if (tier.limit !== null) prevLimit = tier.limit;
     }
-
-    const grandTotal = Math.round(totalConsumptionCost + FEES);
-    return { cons, grandTotal };
-  }
-
-  function updateDisplay(currentReading) {
-    if (currentReading < prevReading) {
-      document.getElementById('consumptionVal').textContent = '0 m³';
-      document.getElementById('invoiceVal').textContent = '0 ج.م';
-      return;
-    }
-    const result = calculateInvoice(currentReading);
-    document.getElementById('consumptionVal').textContent = `${result.cons} m³`;
-    document.getElementById('invoiceVal').textContent = `${smartFmt(result.grandTotal)} ج.م`;
+    total += REAL_PRICES.fees;
+    
+    document.getElementById('invoiceVal').textContent = `${total.toFixed(2)} ج.م`;
+    const grandTotal = currentDue + total;
+    document.getElementById('totalVal').textContent = `${grandTotal.toFixed(2)} ج.م`;
+    return { consumption, total, grandTotal };
   }
 
   document.getElementById('v').addEventListener('input', function() {
     if (this.value.length > 5) this.value = this.value.slice(0, 5);
-    updateDisplay(Number(this.value) || 0);
+    calculate(Number(this.value) || 0);
   });
 
   document.getElementById('saveBtn').onclick = async () => {
     const val = Number(document.getElementById('v').value);
-    if (!val || val < prevReading) {
-      return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
-    }
+    if (!val || val < prevReading) return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
     
-    const result = calculateInvoice(val);
-    document.getElementById('saveBtn').textContent = '⏳ جارٍ الحفظ...';
+    const result = calculate(val);
     
     try {
       const existing = await db.movements.where({ key: key }).first();
       if (existing) {
-        await db.movements.update(existing.id, { 
-          reading: val, consumption: result.cons, estimatedInvoice: result.grandTotal, date: new Date().toISOString() 
-        });
+        await db.movements.update(existing.id, { reading: val, consumption: result.consumption, estimatedInvoice: result.total, date: new Date().toISOString() });
       } else {
-        await db.movements.add({
-          key: key, period: '2026-11', reading: val, prevReading: prevReading, 
-          consumption: result.cons, estimatedInvoice: result.grandTotal, months: billingMonths, status: 'pending', date: new Date().toISOString()
-        });
+        await db.movements.add({ key: key, period: '2026-11', reading: val, prevReading: prevReading, consumption: result.consumption, estimatedInvoice: result.total, months: billingMonths, status: 'pending', date: new Date().toISOString() });
       }
-      
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'READING_SAVED' }, '*');
-      } else {
-        window.close();
-      }
-    } catch (err) {
-      alert('خطأ في الحفظ: ' + err.message);
-      document.getElementById('saveBtn').textContent = 'حفظ القراءة';
-    }
+      if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_SAVED' }, '*');
+      else window.close();
+    } catch (err) { alert('خطأ: ' + err.message); }
   };
 
   document.getElementById('cancelBtn').onclick = () => {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
-    } else {
-      window.close();
-    }
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
+    else window.close();
   };
+
+  init();
 </script>
 </body>
 </html>
