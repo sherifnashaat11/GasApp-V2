@@ -247,6 +247,13 @@ async function renderHome() {
 }
 
 // ======================= دالة الإيصال (تجريبي) =======================
+
+
+
+
+
+
+
 function showReceipt(receipts) {
   let html = `<div style="font-family: Tahoma; text-align:center; padding: 20px; direction: rtl;">`;
   html += `<h2 style="margin-bottom:10px;">🧾 إيصال تحصيل</h2>`;
@@ -259,6 +266,41 @@ function showReceipt(receipts) {
     total += r.amount;
     html += `<tr><td style="border:1px solid #ccc; padding:8px;">${r.name}</td><td style="border:1px solid #ccc; padding:8px;">${r.amount} ج</td></tr>`;
   });
+  
+  html += `<tr style="font-weight:bold; background:#e0f2fe;"><td style="border:1px solid #ccc; padding:8px;">الإجمالي</td><td style="border:1px solid #ccc; padding:8px;">${total} ج</td></tr>`;
+  html += `</table>`;
+  
+  // أزرار التحكم
+  html += `<div style="display:flex; gap:10px; margin-top:20px;">
+    <button id="btnDoPrint" style="flex:1; padding:10px; background:#0f2438; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">🖨️ طباعة</button>
+    <button id="btnCloseReceipt" style="flex:1; padding:10px; background:#e2e8f0; color:#333; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">إغلاق</button>
+  </div>`;
+  html += `</div>`;
+
+  const d = document.createElement('dialog');
+  d.style.cssText = 'padding:0; border:none; border-radius:12px; overflow:hidden; max-width:400px; width:90vw;';
+  d.innerHTML = html;
+  document.body.appendChild(d);
+  d.showModal();
+
+  // إغلاق النافذة
+  d.querySelector('#btnCloseReceipt').onclick = () => { d.close(); d.remove(); };
+
+  // طباعة وإغلاق
+  d.querySelector('#btnDoPrint').onclick = () => {
+    window.print();
+    // إغلاق النافذة بعد أمر الطباعة
+    setTimeout(() => {
+      d.close();
+      d.remove();
+      renderHome(); // تحديث الشاشة الرئيسية
+    }, 500);
+  };
+}
+
+
+
+
   
   html += `<tr style="font-weight:bold; background:#e0f2fe;"><td style="border:1px solid #ccc; padding:8px;">الإجمالي</td><td style="border:1px solid #ccc; padding:8px;">${total} ج</td></tr>`;
   html += `</table>`;
