@@ -1,19 +1,8 @@
 /* ============================================================
    shared/db.js - V3.2
-   الغرض: إدارة قاعدة البيانات (Dexie.js) + منطق الحاسبة + Migration
+   الغرض: قاعدة البيانات (Dexie) + الكود 16 رقم + النظام المحاسبي
    الجداول: subscribers, movements, meta, profile, archive
-   التغييرات في V3.2:
-   - buildAptKey: 8 معاملات → 16 رقم (كود العميل الكامل)
-   - searchByFullCode: بحث بـ 16 رقم
-   - recordPayment: receiptRef = key + YYYYMMDDHHMM
-   - getDigitConfig / setDigitConfig (من meta)
-   - getLineOfRoute / setLineOfRoute (من profile)
-   - getGovMap / getRegionMap (ترجمة ذكية)
-   - getPrices / setPrices (Time-Series)
-   - getPriceForPeriod / monthlyCostDetailed
-   - calcNextInvoice (الرسوم مرة واحدة فقط)
-   - numberToArabicWords
-   - billPendingReadings
+   ملاحظة: الرسوم (fees) تُحسب مرة واحدة فقط لكل فاتورة.
 ============================================================ */
 
 if (typeof window.Dexie === 'undefined') {
@@ -23,7 +12,49 @@ if (typeof window.Dexie === 'undefined') {
 export const db = new window.Dexie('GasAppV2_Enterprise');
 
 /* ============================================================
-   Schema V3 — مرن + متوافق مع V1/V2
+   ثوابت الكود
+============================================================ */
+export const FIELD_ORDER = ['gov', 'region', 'route', 'sector', 'blk', 'bld', 'apt', 'sub'];
+export const FIELD_LABELS = {
+  gov: 'محافظة', region: 'منطقة', route: 'يومية', sector: 'قطاع',
+  blk: 'بلوك', bld: 'عمارة', apt: 'شقة', sub: 'فرعي'
+};
+export const DEFAULT_DIGIT_CONFIG = {
+  gov: 2, region: 2, route: 2, sector: 2, blk: 2, bld: 2, apt: 2, sub: 2
+};
+const BLD_FIELDS = FIELD_ORDER.slice(0, 6); // gov..bld
+
+let digitCfg = { ...DEFAULT_DIGIT_CONFIG };
+
+/* ============================================================
+   أدوات الأرقام والتاريخ
+============================================================ */
+const toAscii = (v) => String(v ?? '')
+  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+  .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+
+const onlyDigits = (v) => toAscii(v).replace(/\D/g, '');
+
+function padField(field, val) {
+  const w = digitCfg[field] || 2;
+  const s = onlyDigits(val);
+  if (!s) return '0'.repeat(w);
+  return s.padStart(w, '0').slice(-w);
+}
+
+const totalLen = () => FIELD_ORDER.reduce((n, f) => n + (digitCfg[f] || 2), 0);
+const bldLen = () => BLD_FIELDS.reduce((n, f) => n + (digitCfg[f] || 2), 0);
+
+/** YYYYMMDDHHMM بالتوقيت المحلي */
+export function dateStamp(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+/* ============================================================
+   Schema
+   v3 = النسخة القديمة (aptKey من 4 أجزاء)  |  v4 = V3.2
 ============================================================ */
 db.version(3).stores({
   subscribers: 'key, bldKey, aptKey, nameNormalized, inRoute, sector, blk, bld, apt, dueAmount, count, prevReading, months, status',
@@ -31,50 +62,90 @@ db.version(3).stores({
   meta: 'key',
   profile: '&empId',
   archive: '&receiptRef, key, date, source'
-}).upgrade(tx => {
-  return tx.table('subscribers').toCollection().modify(sub => {
-    if (sub.aptKey === undefined) {
-      const sec = String(sub.sector || '').padStart(2, '0');
-      const blk = String(sub.blk || '').padStart(2, '0');
-      const bld = String(sub.bld || '').padStart(2, '0');
-      const apt = String(sub.apt || '').padStart(2, '0');
-      sub.aptKey = `${sec}|${blk}|${bld}|${apt}`;
-    }
-    if (sub.prevReading === undefined) sub.prevReading = 0;
-    if (sub.months === undefined) sub.months = 1;
-    if (sub.dueAmount === undefined) sub.dueAmount = 0;
-    if (sub.count === undefined) sub.count = 0;
-    if (sub.status === undefined) sub.status = 'active';
-  }).then(() => {
-    return tx.table('movements').toCollection().modify(m => {
-      if (m.source === undefined) m.source = 'route';
-      if (m.printed === undefined) m.printed = false;
-      if (m.aptKey === undefined) m.aptKey = null;
-    });
-  });
 });
 
-/* ============================================================
-   1. بناء المفاتيح — V3.2 (16 رقم للعميل)
-============================================================ */
+db.version(4).stores({
+  subscribers: 'key, aptKey, bldKey, nameNormalized, inRoute, gov, region, route, sector, blk, bld, apt, sub, dueAmount, count, prevReading, months, status',
+  movements: '++id, [key+period], key, period, type, source, aptKey, receiptRef, status, date, printed',
+  meta: 'key',
+  profile: '&empId',
+  archive: '&receiptRef, key, date, source'
+}).upgrade(tx => migrateV4(tx));
 
-/**
- * بناء كود العميل الكامل (16 رقم بلا فواصل)
- * الترتيب: gov|region|route|sector|blk|bld|apt|sub
- * كل خانة رقمان (افتراضي) — يمكن تغييره عبر digitConfig
- */
-export function buildAptKey(gov, region, route, sector, blk, bld, apt, sub) {
-  const pad = (v) => String(v || '').padStart(2, '0').slice(-2);
-  return [
-    pad(gov), pad(region), pad(route), pad(sector),
-    pad(blk), pad(bld), pad(apt), pad(sub)
-  ].join('');
+/** Migration من V3 إلى V4 (مُصدَّرة للاختبار) */
+export async function migrateV4(tx) {
+  // 1) المشتركون: تحويل المفتاح إلى 16 رقم + الحقول الجديدة
+  const oldSubs = await tx.table('subscribers').toArray();
+  const keyMap = new Map();
+  const fresh = new Map();
+  for (const s of oldSubs) {
+    const n = normalizeSubscriber(s);
+    keyMap.set(s.key, n.key);
+    fresh.set(n.key, n); // المكرر حرفياً يُدمج
+  }
+  await tx.table('subscribers').clear();
+  await tx.table('subscribers').bulkPut([...fresh.values()]);
+
+  // 2) الحركات: مفتاح جديد + نوع + receiptRef + حقول ناقصة
+  await tx.table('movements').toCollection().modify(m => {
+    const nk = keyMap.get(m.key) || normalizeKeyLoose(m.key);
+    m.key = nk;
+    m.aptKey = nk;
+    if (!m.type) m.type = (m.reading !== undefined && m.reading !== null) ? 'read' : 'pay';
+    if (m.source === undefined) m.source = 'route';
+    if (m.printed === undefined) m.printed = false;
+    if (m.type === 'pay' && !m.receiptRef) m.receiptRef = nk + dateStamp(m.date || new Date());
+    if (!m.status) m.status = m.type === 'pay' ? 'done' : 'pending';
+  });
 }
 
-/** بناء مفتاح العمارة (للتوافق مع القديم) */
-export function buildBldKey(sector, blk, bld) {
-  const pad = (v) => String(v || '').padStart(2, '0');
-  return `${pad(sector)}|${pad(blk)}|${pad(bld)}`;
+/* ============================================================
+   الكود: بناء / تفكيك / تطبيع
+============================================================ */
+
+/** كود الشقة الكامل (16 رقم افتراضياً، بلا فواصل). يقبل 8 وسائط أو كائناً. */
+export function buildAptKey(gov, region, route, sector, blk, bld, apt, sub) {
+  let v;
+  if (gov && typeof gov === 'object') {
+    const o = gov;
+    v = [o.gov, o.region ?? o.area, o.route ?? o.daily, o.sector, o.blk, o.bld, o.apt, o.sub];
+  } else {
+    v = [gov, region, route, sector, blk, bld, apt, sub];
+  }
+  return FIELD_ORDER.map((f, i) => padField(f, v[i])).join('');
+}
+
+/** كود العمارة (12 رقم، بلا فواصل) */
+export function buildBldKey(gov, region, route, sector, blk, bld) {
+  let v;
+  if (gov && typeof gov === 'object') {
+    const o = gov;
+    v = [o.gov, o.region ?? o.area, o.route ?? o.daily, o.sector, o.blk, o.bld];
+  } else {
+    v = [gov, region, route, sector, blk, bld];
+  }
+  return BLD_FIELDS.map((f, i) => padField(f, v[i])).join('');
+}
+
+/** تفكيك كود كامل إلى أجزائه (null إن لم يكن الطول مطابقاً) */
+export function splitCode(code) {
+  const c = onlyDigits(code);
+  if (c.length !== totalLen()) return null;
+  const out = {};
+  let pos = 0;
+  for (const f of FIELD_ORDER) {
+    const w = digitCfg[f] || 2;
+    out[f] = c.slice(pos, pos + w);
+    pos += w;
+  }
+  return out;
+}
+
+/** مفتاح قديم → 16 رقم (أو يُعاد كما هو إن لم يكن رقمياً) */
+function normalizeKeyLoose(k) {
+  const raw = String(k ?? '');
+  const d = onlyDigits(raw);
+  return (d.length === totalLen() && !/[A-Za-z_]/.test(raw)) ? d : raw;
 }
 
 /** تطبيع الاسم للبحث */
@@ -91,71 +162,141 @@ export function normalizeName(name) {
     .trim();
 }
 
-/* ============================================================
-   2. إعدادات الخانات (digitConfig)
-============================================================ */
+/**
+ * تحويل أي سجل مشترك (قديم أو من الاستيراد) إلى الشكل الجديد.
+ * - المفتاح 20-06-02-02-31-02-02-00 → 2006020231020200
+ * - area → region ، daily → route ، sub الافتراضي 00
+ */
+export function normalizeSubscriber(s) {
+  const rawKey = String(s.key ?? '');
+  let parts = null;
+  if (!/[A-Za-z_]/.test(rawKey)) parts = splitCode(rawKey);
+  if (!parts) {
+    parts = {
+      gov: padField('gov', s.gov),
+      region: padField('region', s.region ?? s.area),
+      route: padField('route', s.route ?? s.daily ?? s.sector),
+      sector: padField('sector', s.sector),
+      blk: padField('blk', s.blk),
+      bld: padField('bld', s.bld),
+      apt: padField('apt', s.apt),
+      sub: padField('sub', s.sub ?? '00')
+    };
+  }
+  const key = FIELD_ORDER.map(f => parts[f]).join('');
+  const { area, daily, ...rest } = s;
+  return {
+    ...rest,
+    ...parts,
+    key,
+    aptKey: key,
+    bldKey: key.slice(0, bldLen()),
+    nameNormalized: normalizeName(s.name),
+    inRoute: s.inRoute === undefined ? 1 : (s.inRoute ? 1 : 0),
+    dueAmount: Number(s.dueAmount) || 0,
+    count: Number(s.count) || 0,
+    prevReading: Number(s.prevReading) || 0,
+    months: Number(s.months) || 1,
+    status: s.status || 'active'
+  };
+}
 
-const DEFAULT_DIGIT_CONFIG = {
-  gov: 2, region: 2, route: 2, sector: 2,
-  blk: 2, bld: 2, apt: 2, sub: 2
-};
+/* ============================================================
+   الإعدادات (meta / profile) + ذاكرة مؤقتة متزامنة
+============================================================ */
+let _prices = null;
+let _fees = 18;
+
+async function metaGet(key, fallback) {
+  const r = await db.meta.get(key);
+  return r && r.value !== undefined ? r.value : fallback;
+}
+const metaSet = (key, value) => db.meta.put({ key, value });
 
 export async function getDigitConfig() {
-  const rec = await db.meta.get('digitConfig');
-  return rec ? { ...DEFAULT_DIGIT_CONFIG, ...rec.value } : { ...DEFAULT_DIGIT_CONFIG };
+  const saved = await metaGet('digitConfig', null);
+  digitCfg = { ...DEFAULT_DIGIT_CONFIG, ...(saved || {}) };
+  return { ...digitCfg };
 }
-
 export async function setDigitConfig(config) {
-  await db.meta.put({ key: 'digitConfig', value: { ...DEFAULT_DIGIT_CONFIG, ...config } });
-}
-
-/* ============================================================
-   3. خط السير (lineOfRoute) — من profile
-============================================================ */
-
-export async function getLineOfRoute() {
-  const prof = await db.profile.toCollection().first();
-  return prof?.lineOfRoute || null;
-}
-
-export async function setLineOfRoute(lineOfRoute) {
-  const prof = await db.profile.toCollection().first();
-  if (prof) {
-    await db.profile.update(prof.empId, { lineOfRoute });
-  } else {
-    await db.profile.add({ empId: 'default', lineOfRoute });
+  const next = { ...DEFAULT_DIGIT_CONFIG };
+  for (const f of FIELD_ORDER) {
+    const n = Number(config?.[f]);
+    if (Number.isInteger(n) && n >= 1 && n <= 6) next[f] = n;
   }
+  digitCfg = next;
+  await metaSet('digitConfig', next);
+  return { ...next };
+}
+
+/* ---- خط السير ---- */
+const LOR_ID = 'local';
+export async function getLineOfRoute() {
+  const p = await db.profile.get(LOR_ID);
+  if (p && p.lineOfRoute) return p.lineOfRoute;
+  try {
+    const ls = JSON.parse(localStorage.getItem('app-line-of-route') || 'null');
+    if (ls && ls.gov) return ls;
+  } catch (e) { /* تجاهل */ }
+  return null;
+}
+export async function setLineOfRoute(route) {
+  const lor = {
+    gov: padField('gov', route?.gov),
+    region: padField('region', route?.region),
+    route: padField('route', route?.route),
+    sub: padField('sub', route?.sub ?? '00')
+  };
+  const p = (await db.profile.get(LOR_ID)) || { empId: LOR_ID };
+  p.lineOfRoute = lor;
+  await db.profile.put(p);
+  try { localStorage.setItem('app-line-of-route', JSON.stringify(lor)); } catch (e) { /* تجاهل */ }
+  return lor;
+}
+/** استنتاج خط السير من البيانات (الأكثر تكراراً) */
+export async function inferLineOfRoute() {
+  const subs = await db.subscribers.limit(500).toArray();
+  if (!subs.length) return null;
+  const top = (f) => {
+    const c = new Map();
+    subs.forEach(s => c.set(s[f], (c.get(s[f]) || 0) + 1));
+    return [...c.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+  return { gov: top('gov'), region: top('region'), route: top('route'), sub: top('sub') };
+}
+
+/* ---- خرائط الترجمة اسم↔رقم (تُخزَّن {رقم: اسم}) ---- */
+export const getGovMap = () => metaGet('govMap', {});
+export const getRegionMap = () => metaGet('regionMap', {});
+export async function setGovMap(map) { await metaSet('govMap', map || {}); return map; }
+export async function setRegionMap(map) { await metaSet('regionMap', map || {}); return map; }
+
+/** إدخال (اسم أو رقم) → رقم الخانة. يرجع '' إن لم يُعرف. */
+export function resolveCode(input, map, field) {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+  if (/^[0-9٠-٩۰-۹]+$/.test(raw)) return padField(field, raw);
+  const n = normalizeName(raw);
+  for (const [code, name] of Object.entries(map || {})) {
+    if (normalizeName(name) === n) return code;
+  }
+  for (const [code, name] of Object.entries(map || {})) {
+    if (normalizeName(name).includes(n)) return code;
+  }
+  return '';
+}
+
+/** قيم مميزة لحقل مفهرس (مثل gov) */
+export async function listDistinct(field, filterFn) {
+  if (!filterFn) return (await db.subscribers.orderBy(field).uniqueKeys()).map(String);
+  const set = new Set();
+  await db.subscribers.filter(filterFn).each(s => set.add(s[field]));
+  return [...set].sort();
 }
 
 /* ============================================================
-   4. خرائط المحافظة/المنطقة (ترجمة ذكية)
+   الأسعار والرسوم (Time-Series) — منسوخة من الحاسبة
 ============================================================ */
-
-export async function getGovMap() {
-  const rec = await db.meta.get('govMap');
-  if (rec) return rec.value;
-  // استنتاج من subscribers
-  const subs = await db.subscribers.toArray();
-  const map = {};
-  subs.forEach(s => { if (s.gov && s.govName) map[s.govName] = String(s.gov).padStart(2, '0'); });
-  if (Object.keys(map).length > 0) await db.meta.put({ key: 'govMap', value: map });
-  return map;
-}
-
-export async function getRegionMap() {
-  const rec = await db.meta.get('regionMap');
-  if (rec) return rec.value;
-  const subs = await db.subscribers.toArray();
-  const map = {};
-  subs.forEach(s => { if (s.region && s.regionName) map[`${s.govName}|${s.regionName}`] = String(s.region).padStart(2, '0'); });
-  if (Object.keys(map).length > 0) await db.meta.put({ key: 'regionMap', value: map });
-  return map;
-}
-
-/* ============================================================
-   5. الأسعار (Time-Series) — من calculator.html
-============================================================ */
-
 export const DEFAULT_PERIODS = [
   { date:'2016-11-01', tiers:[{name:'الأولى',limit:30,price:0.75},{name:'الثانية',limit:60,price:1.50},{name:'الثالثة',limit:null,price:2.00}] },
   { date:'2017-07-01', tiers:[{name:'الأولى',limit:30,price:1.00},{name:'الثانية',limit:60,price:1.75},{name:'الثالثة',limit:null,price:2.50}] },
@@ -168,330 +309,162 @@ export const DEFAULT_PERIODS = [
   { date:'2026-03-01', tiers:[{name:'الأولى',limit:30,price:6.00},{name:'الثانية',limit:60,price:8.00},{name:'الثالثة',limit:null,price:12.00}] }
 ];
 
-const DEFAULT_FEES = 18;
+const sortPeriods = (ps) => [...ps].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+_prices = sortPeriods(DEFAULT_PERIODS);
 
 export async function getPrices() {
-  const rec = await db.meta.get('prices');
-  return rec ? rec.value : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
+  const saved = await metaGet('prices', null);
+  _prices = sortPeriods(Array.isArray(saved) && saved.length ? saved : DEFAULT_PERIODS);
+  return _prices;
 }
-
 export async function setPrices(periods) {
-  await db.meta.put({ key: 'prices', value: periods });
+  if (!Array.isArray(periods) || !periods.length) throw new Error('قائمة الأسعار فارغة');
+  periods.forEach(p => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.date)) throw new Error('تاريخ فترة غير صالح: ' + p.date);
+    if (!Array.isArray(p.tiers) || !p.tiers.length) throw new Error('الفترة بلا شرائح: ' + p.date);
+  });
+  _prices = sortPeriods(periods);
+  await metaSet('prices', _prices);
+  return _prices;
 }
-
 export async function getFees() {
-  const rec = await db.meta.get('fees');
-  return rec ? Number(rec.value) : DEFAULT_FEES;
+  _fees = Number(await metaGet('fees', 18));
+  return _fees;
 }
-
 export async function setFees(fees) {
-  await db.meta.put({ key: 'fees', value: Number(fees) });
+  const n = Number(fees);
+  if (!(n >= 0)) throw new Error('قيمة الرسوم غير صالحة');
+  _fees = n;
+  await metaSet('fees', n);
+  return n;
 }
 
-/* ============================================================
-   6. منطق الحساب — من calculator.html (معدّل: الرسوم مرة واحدة)
-============================================================ */
-
-function parseDate(s) {
-  const parts = String(s).split('-');
-  return { y: Number(parts[0])||2026, m: Number(parts[1])||1, d: Number(parts[2])||1 };
+/** تحميل كل الإعدادات في الذاكرة (يُستدعى مرة عند البدء) */
+export async function initDb() {
+  await db.open();
+  await getDigitConfig();
+  await getPrices();
+  await getFees();
 }
 
-function mIdx(y, m) { return y * 12 + (m - 1); }
-
-function fmtMonthYear(y, m) {
-  const dt = new Date(y, m - 1, 1);
-  return dt.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+/** شرائح الفترة السارية في تاريخ معيّن (YYYY-MM-DD أو YYYY-MM) */
+export function getPriceForPeriod(dateStr, periods = _prices) {
+  let d = String(dateStr || '');
+  if (/^\d{4}-\d{2}$/.test(d)) d += '-01';
+  const list = sortPeriods(periods && periods.length ? periods : DEFAULT_PERIODS);
+  let chosen = list[0];
+  for (const p of list) { if (p.date <= d) chosen = p; else break; }
+  return chosen.tiers;
 }
 
-/** حساب تكلفة شهر واحد بالشرائح */
+/** تكلفة شهر واحد بحسب الشرائح التراكمية */
 export function monthlyCostDetailed(cons, tiers) {
-  let rem = Number(cons) || 0;
-  let cost = 0;
-  let prev = 0;
+  let remaining = Math.max(0, Number(cons) || 0);
+  let prevLimit = 0, cost = 0;
   const rows = [];
-  if (!Array.isArray(tiers)) return { cost: 0, rows: [] };
-
-  for (let i = 0; i < tiers.length; i++) {
-    if (rem <= 0) break;
-    const t = tiers[i];
-    let cap;
-    if (t.limit === null || t.limit === undefined || t.limit === '' || isNaN(t.limit)) {
-      cap = rem;
-    } else {
-      cap = Math.max(0, Number(t.limit) - prev);
+  for (const t of tiers) {
+    if (remaining <= 0) break;
+    const cap = t.limit === null || t.limit === undefined ? remaining : Math.max(0, t.limit - prevLimit);
+    const qty = Math.min(remaining, cap);
+    if (qty > 0) {
+      const c = qty * t.price;
+      cost += c;
+      rows.push({ name: t.name, from: prevLimit, to: prevLimit + qty, qty, price: t.price, cost: c });
     }
-    const used = Math.min(rem, cap);
-    const tierCost = used * (Number(t.price) || 0);
-    cost += tierCost;
-    if (used > 0) {
-      rows.push({ tierName: `شريحة ${t.name}`, price: t.price, meters: used, total: tierCost });
-    }
-    rem -= used;
-    if (t.limit !== null && t.limit !== undefined && t.limit !== '' && !isNaN(t.limit)) {
-      prev = Number(t.limit);
-    }
+    remaining -= qty;
+    if (t.limit !== null && t.limit !== undefined) prevLimit = t.limit; else prevLimit += qty;
   }
   return { cost, rows };
 }
 
+/** أشهر المحاسبة (من الأقدم للأحدث) تنتهي بالفترة period */
+function monthsRange(endPeriod, months) {
+  const [y, m] = endPeriod.split('-').map(Number);
+  const out = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(y, m - 1 - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return out;
+}
+
 /**
- * حساب الفاتورة القادمة — الرسوم مرة واحدة فقط
- * @param {Object} opts
- * @param {number} opts.reading - القراءة الحالية
- * @param {number} opts.prevReading - القراءة السابقة
- * @param {number} opts.months - أشهر المحاسبة
- * @param {number} opts.fees - الرسوم (مرة واحدة)
- * @param {Array} opts.periods - فترات الأسعار
- * @returns {Object} { total, exactTotal, consumptionCost, fees, avg, months, rows, ... }
+ * الفاتورة القادمة: شهراً بشهر حسب سعر كل فترة + الرسوم مرة واحدة.
+ * متوسط الاستهلاك الشهري = الاستهلاك الكلي ÷ أشهر المحاسبة.
  */
-export function calcNextInvoice({ reading, prevReading, months, fees, periods }) {
+export function calcNextInvoice({ reading, prevReading, months = 1, fees, periods, period } = {}) {
+  const m = Math.max(1, Math.floor(Number(months) || 1));
   const cons = Math.max(0, (Number(reading) || 0) - (Number(prevReading) || 0));
-  const nMonths = Math.max(1, Number(months) || 1);
-  const avg = cons / nMonths;
-  const now = new Date();
-  const targetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const aEnd = mIdx(targetDate.getFullYear(), targetDate.getMonth() + 1);
-  const aStart = aEnd - nMonths + 1;
-
-  const endMonthName = targetDate.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
-  const billPeriodText = `فاتورة شهر ${endMonthName}`;
-
-  const sorted = [...(periods || DEFAULT_PERIODS)].sort((a, b) => a.date.localeCompare(b.date));
+  const avg = cons / m;
+  const f = Number(fees ?? _fees) || 0;
+  const list = monthsRange(period || getCurrentPeriod(), m);
 
   let totalConsumptionCost = 0;
-  const rows = [];
-  let totalCovered = 0;
+  const rows = list.map(p => {
+    const tiers = getPriceForPeriod(p + '-01', periods || _prices);
+    const d = monthlyCostDetailed(avg, tiers);
+    totalConsumptionCost += d.cost;
+    return { month: p, avg, cost: d.cost, tiers: d.rows };
+  });
 
-  for (let i = 0; i < sorted.length; i++) {
-    const pDate = parseDate(sorted[i].date);
-    const start = (i === 0) ? -Infinity : mIdx(pDate.y, pDate.m);
-    const nextPDate = (i < sorted.length - 1) ? parseDate(sorted[i + 1].date) : null;
-    const end = nextPDate === null ? Infinity : mIdx(nextPDate.y, nextPDate.m) - 1;
-
-    const s = Math.max(start, aStart);
-    const e = Math.min(end, aEnd);
-    const overlap = Math.max(0, e - s + 1);
-    if (overlap === 0) continue;
-
-    const res = monthlyCostDetailed(avg, sorted[i].tiers);
-    const sub = overlap * res.cost;
-    totalConsumptionCost += sub;
-    totalCovered += overlap;
-
-    const startYear = Math.floor(s / 12);
-    const startMonth = (s % 12) + 1;
-    const endYear = Math.floor(e / 12);
-    const endMonth = (e % 12) + 1;
-
-    rows.push({
-      fromText: fmtMonthYear(startYear, startMonth),
-      toText: fmtMonthYear(endYear, endMonth),
-      months: overlap,
-      monthlyCost: res.cost,
-      subtotal: sub,
-      tierRows: res.rows,
-      avg
-    });
-  }
-
-  const feesOnce = Number(fees) || DEFAULT_FEES; // ✅ مرة واحدة فقط
-  const exactTotal = totalConsumptionCost + feesOnce;
-  const total = Math.round(exactTotal);
-
+  const exactGrandTotal = totalConsumptionCost + f; // الرسوم مرة واحدة
+  const grandTotal = Math.round(exactGrandTotal);
   return {
-    months: nMonths,
-    cons, avg, fees: feesOnce,
-    prevReading: Number(prevReading) || 0,
-    reading: Number(reading) || 0,
-    consumptionCost: totalConsumptionCost,
-    exactTotal, total,
-    totalCovered, billPeriodText,
-    rows
+    cons, avg, months: m, totalConsumptionCost, fees: f,
+    exactGrandTotal, grandTotal, rows,
+    words: numberToArabicWords(grandTotal)
   };
 }
 
 /* ============================================================
-   7. تحويل الأرقام إلى كلمات عربية
+   التفقيط العربي
 ============================================================ */
+const ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة',
+  'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+const TENS = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+const HUNDREDS = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
 
-export function numberToArabicWords(n) {
-  const num = Math.floor(Number(n) || 0);
-  if (num === 0) return 'فقط صِفْرٌ جنيها مصريا فقط لاغير';
-
-  const units = ['','مائة','مئتان','ثلاثمائة','أربعمائة','خمسمائة','ستمائة','سبعمائة','ثمانمائة','تسعمائة'];
-  const tens = ['','عشرة','عشرون','ثلاثون','أربعون','خمسون','ستون','سبعون','ثمانون','تسعون'];
-  const teens = ['عشرة','أحد عشر','اثنا عشر','ثلاثة عشر','أربعة عشر','خمسة عشر','ستة عشر','سبعة عشر','ثمانية عشر','تسعة عشر'];
-  const ones = ['','واحد','اثنان','ثلاثة','أربعة','خمسة','ستة','سبعة','ثمانية','تسعة'];
-
-  function less1000(val) {
-    if (val === 0) return '';
-    let res = '';
-    const h = Math.floor(val / 100);
-    const rem = val % 100;
-    if (h > 0) res += units[h];
-    if (rem > 0) {
-      if (res) res += ' و';
-      if (rem < 10) res += ones[rem];
-      else if (rem < 20) res += teens[rem - 10];
-      else {
-        const t = Math.floor(rem / 10);
-        const o = rem % 10;
-        if (o > 0) res += ones[o] + ' و';
-        res += tens[t];
-      }
+function below1000(n) {
+  const parts = [];
+  const h = Math.floor(n / 100), r = n % 100;
+  if (h) parts.push(HUNDREDS[h]);
+  if (r) {
+    if (r < 20) parts.push(ONES[r]);
+    else {
+      const u = r % 10, t = Math.floor(r / 10);
+      parts.push(u ? `${ONES[u]} و${TENS[t]}` : TENS[t]);
     }
-    return res;
   }
+  return parts.join(' و');
+}
 
-  function convert(val) {
-    if (val === 0) return '';
-    if (val < 1000) return less1000(val);
-    if (val < 1000000) {
-      const th = Math.floor(val / 1000);
-      const rem = val % 1000;
-      let thStr = '';
-      if (th === 1) thStr = 'ألف';
-      else if (th === 2) thStr = 'ألفان';
-      else if (th <= 10) thStr = less1000(th) + ' آلاف';
-      else thStr = less1000(th) + ' ألفاً';
-      if (rem > 0) thStr += ' و' + less1000(rem);
-      return thStr;
-    }
-    return String(val);
-  }
+function scaleWord(n, one, two, few, many) {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${below1000(n)} ${few}`;
+  const r = n % 100;
+  if (n >= 100 && (r === 0 || r === 1 || r === 2)) return `${below1000(n)} ${one}`;
+  if (n >= 100 && r >= 3 && r <= 10) return `${below1000(n)} ${few}`;
+  return `${below1000(n)} ${many}`;
+}
 
-  return `فقط ${convert(num)} جنيها مصريا فقط لاغير`;
+export function numberToArabicWords(num) {
+  let n = Math.floor(Math.abs(Number(num) || 0));
+  if (n === 0) return 'صفر';
+  const parts = [];
+  const billions = Math.floor(n / 1e9); n %= 1e9;
+  const millions = Math.floor(n / 1e6); n %= 1e6;
+  const thousands = Math.floor(n / 1e3); n %= 1e3;
+  if (billions) parts.push(scaleWord(billions, 'مليار', 'ملياران', 'مليارات', 'مليار'));
+  if (millions) parts.push(scaleWord(millions, 'مليون', 'مليونان', 'ملايين', 'مليوناً'));
+  if (thousands) parts.push(scaleWord(thousands, 'ألف', 'ألفان', 'آلاف', 'ألفاً'));
+  if (n) parts.push(below1000(n));
+  return parts.join(' و');
 }
 
 /* ============================================================
-   8. البحث
+   الفترة والإحصائيات
 ============================================================ */
-
-/** البحث بالكود الكامل (16 رقم) */
-export async function searchByFullCode(fullCode) {
-  const clean = String(fullCode).replace(/\D/g, '');
-  if (clean.length !== 16) return [];
-  return db.subscribers.where('aptKey').equals(clean).toArray();
-}
-
-/** البحث بالاسم داخل نطاق (محافظة + منطقة) */
-export async function searchByName(nameQuery, gov, region) {
-  const norm = normalizeName(nameQuery);
-  if (!norm) return [];
-  const all = await db.subscribers.toArray();
-  return all.filter(s =>
-    (!gov || String(s.gov) === String(gov)) &&
-    (!region || String(s.region) === String(region)) &&
-    normalizeName(s.name).includes(norm)
-  );
-}
-
-/* ============================================================
-   9. جلب العملاء
-============================================================ */
-
-/** جلب عمارة كاملة مع حركاتها */
-export async function getBuildingWithMovements(bldKey) {
-  const subs = await db.subscribers.where('bldKey').equals(bldKey).toArray();
-  const keys = subs.map(s => s.key);
-  if (keys.length === 0) return [];
-  const moves = await db.movements.where('key').anyOf(keys).toArray();
-  const moveMap = new Map();
-  moves.forEach(m => { if (!moveMap.has(m.key)) moveMap.set(m.key, m); });
-  return subs.map(s => ({ ...s, movement: moveMap.get(s.key) || null }));
-}
-
-/** جلب العملاء بلا قراءة هذا الشهر */
-export async function getUnreadSubscribers(period) {
-  const allSubs = await db.subscribers.toArray();
-  const reads = await db.movements
-    .where('period').equals(period)
-    .filter(m => !!m.reading)
-    .toArray();
-  const readKeys = new Set(reads.map(r => r.key));
-  return allSubs.filter(s => Number(s.dueAmount) > 0 && !readKeys.has(s.key));
-}
-
-/* ============================================================
-   10. السداد والقراءة
-============================================================ */
-
-/** تسجيل سداد — مع receiptRef = key + YYYYMMDDHHMM */
-export async function recordPayment({ key, name, amount, count, source = 'route', aptKey = null, period }) {
-  const sub = await db.subscribers.get(key);
-  if (!sub) throw new Error('العميل غير موجود');
-
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const HH = String(now.getHours()).padStart(2, '0');
-  const MM = String(now.getMinutes()).padStart(2, '0');
-  const receiptRef = `${key}${yyyy}${mm}${dd}${HH}${MM}`;
-
-  const newDue = Math.max(0, (Number(sub.dueAmount) || 0) - amount);
-  const newCount = Math.max(0, (Number(sub.count) || 0) - count);
-  await db.subscribers.update(key, { dueAmount: newDue, count: newCount });
-
-  const move = {
-    key, type: 'pay', amount, count,
-    date: now.toISOString(),
-    source, aptKey: aptKey || sub.aptKey,
-    period: period || getCurrentPeriod(),
-    printed: false, status: 'done',
-    receiptRef
-  };
-  await db.movements.add(move);
-  return move;
-}
-
-/** تسجيل قراءة */
-export async function recordReading({ key, reading, prevReading, consumption, estimatedInvoice, months, period }) {
-  const p = period || getCurrentPeriod();
-  const existing = await db.movements
-    .where('[key+period]').equals([key, p])
-    .filter(m => m.type === 'read')
-    .first();
-
-  const data = {
-    key, type: 'read', reading, prevReading, consumption,
-    estimatedInvoice, months,
-    date: new Date().toISOString(),
-    period: p, source: 'route', status: 'pending'
-  };
-
-  if (existing) {
-    await db.movements.update(existing.id, data);
-    return existing.id;
-  }
-  return db.movements.add(data);
-}
-
-/** تحويل القراءات pending → billed + إضافتها للمديونية */
-export async function billPendingReadings(period) {
-  const p = period || getCurrentPeriod();
-  const pending = await db.movements
-    .where('period').equals(p)
-    .filter(m => m.type === 'read' && m.status === 'pending')
-    .toArray();
-
-  for (const m of pending) {
-    const sub = await db.subscribers.get(m.key);
-    if (!sub) continue;
-    await db.subscribers.update(m.key, {
-      dueAmount: (Number(sub.dueAmount) || 0) + (Number(m.estimatedInvoice) || 0),
-      count: (Number(sub.count) || 0) + 1
-    });
-    await db.movements.update(m.id, { status: 'billed' });
-  }
-  return pending.length;
-}
-
-/* ============================================================
-   11. أدوات عامة
-============================================================ */
-
 export function getCurrentPeriod() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -509,4 +482,175 @@ export async function getTodayStats() {
     countRead: read.length,
     totalMoves: todayMoves.length
   };
+}
+
+/* ============================================================
+   البحث والاستعلام
+============================================================ */
+
+/** البحث بالكود: 16 رقم → الشقة ، 12 رقم → العمارة كاملة */
+export async function searchByFullCode(code) {
+  const c = onlyDigits(code);
+  if (c.length >= totalLen()) return db.subscribers.where('aptKey').equals(c.slice(0, totalLen())).toArray();
+  if (c.length >= bldLen()) return db.subscribers.where('bldKey').equals(c.slice(0, bldLen())).toArray();
+  return [];
+}
+
+/** البحث بالاسم — فلترة إلزامية (محافظة + منطقة) بالاسم أو الرقم */
+export async function searchByName(nameQuery, gov, region) {
+  const norm = normalizeName(nameQuery);
+  if (!norm || !gov || !region) return [];
+  const [govMap, regionMap] = await Promise.all([getGovMap(), getRegionMap()]);
+  const g = resolveCode(gov, govMap, 'gov');
+  const r = resolveCode(region, regionMap, 'region');
+  if (!g || !r) return [];
+  const words = norm.split(' ');
+  return db.subscribers.where('gov').equals(g)
+    .filter(s => s.region === r && words.every(w => (s.nameNormalized || normalizeName(s.name)).includes(w)))
+    .limit(200).toArray();
+}
+
+/** عمارة كاملة مع حركاتها (آخر حركة + حالة السداد) */
+export async function getBuildingWithMovements(bldKey) {
+  const subs = await db.subscribers.where('bldKey').equals(bldKey).toArray();
+  const keys = subs.map(s => s.key);
+  const moves = keys.length ? await db.movements.where('key').anyOf(keys).toArray() : [];
+  moves.sort((a, b) => new Date(a.date) - new Date(b.date));
+  const latest = new Map(), lastPay = new Map();
+  moves.forEach(m => {
+    latest.set(m.key, m);
+    if (m.type === 'pay') lastPay.set(m.key, m);
+  });
+  return subs
+    .map(s => ({ ...s, movement: latest.get(s.key) || null, lastPay: lastPay.get(s.key) || null }))
+    .sort((a, b) => String(a.apt + a.sub).localeCompare(String(b.apt + b.sub)));
+}
+
+/** قراءة هذا الشهر لعميل (إن وُجدت) */
+export async function getReadingForPeriod(key, period = getCurrentPeriod()) {
+  return db.movements.where('[key+period]').equals([key, period]).filter(m => m.type === 'read').first();
+}
+
+/** العملاء بلا قراءة في الفترة (مع مديونية) — اختيارياً ضمن خط السير */
+export async function getUnreadSubscribers(period, lineOfRoute = null) {
+  const reads = await db.movements.where('period').equals(period).filter(m => m.type === 'read').toArray();
+  const readKeys = new Set(reads.map(r => r.key));
+  let coll = lineOfRoute
+    ? db.subscribers.where('gov').equals(lineOfRoute.gov).filter(s => s.region === lineOfRoute.region && s.route === lineOfRoute.route)
+    : db.subscribers.toCollection();
+  const subs = await coll.toArray();
+  return subs.filter(s => Number(s.dueAmount) > 0 && !readKeys.has(s.key));
+}
+
+/* ============================================================
+   العمليات: سداد / قراءة / ترحيل الفواتير
+============================================================ */
+
+/** تسجيل سداد. receiptRef = كود العميل + YYYYMMDDHHMM (28 رقم) */
+export async function recordPayment({ key, name, amount, count, source = 'route', aptKey = null, period }) {
+  amount = Number(amount); count = Number(count) || 0;
+  if (!(amount > 0)) throw new Error('قيمة السداد غير صالحة');
+
+  return db.transaction('rw', db.subscribers, db.movements, async () => {
+    const sub = await db.subscribers.get(key);
+    if (!sub) throw new Error('العميل غير موجود');
+    const due = Number(sub.dueAmount) || 0;
+    if (amount > due) throw new Error('المبلغ أكبر من المديونية');
+
+    const newDue = Math.max(0, due - amount);
+    const newCount = newDue === 0 ? 0 : Math.max(0, (Number(sub.count) || 0) - count);
+    await db.subscribers.update(key, { dueAmount: newDue, count: newCount });
+
+    // receiptRef فريد: إن تكرر في نفس الدقيقة نزيد دقيقة
+    let when = new Date();
+    let ref = key + dateStamp(when);
+    while (await db.movements.where('receiptRef').equals(ref).count()) {
+      when = new Date(when.getTime() + 60000);
+      ref = key + dateStamp(when);
+    }
+
+    const move = {
+      key, name: name || sub.name, type: 'pay', amount, count,
+      date: new Date().toISOString(),
+      source, aptKey: aptKey || sub.aptKey || key, bldKey: sub.bldKey,
+      period: period || getCurrentPeriod(),
+      receiptRef: ref, printed: false, status: 'done',
+      partial: newDue > 0
+    };
+    move.id = await db.movements.add(move);
+    return move;
+  });
+}
+
+/** تسجيل/تعديل قراءة الفترة (status = pending حتى بداية الشهر التالي) */
+export async function recordReading({ key, reading, prevReading, consumption, estimatedInvoice, months, period, invoice = null, source = 'route' }) {
+  period = period || getCurrentPeriod();
+  const existing = await db.movements.where('[key+period]').equals([key, period]).filter(m => m.type === 'read').first();
+  const data = {
+    key, type: 'read', reading, prevReading, consumption,
+    estimatedInvoice, months,
+    invoice,                     // تفصيل شهري (اختياري) للأرشيف
+    date: new Date().toISOString(),
+    period, source, aptKey: key,
+    printed: false,
+    status: 'pending'
+  };
+  if (existing) {
+    if (existing.status === 'billed') throw new Error('هذه القراءة رُحِّلت للمديونية ولا يمكن تعديلها');
+    await db.movements.update(existing.id, data);
+    return existing.id;
+  }
+  return db.movements.add(data);
+}
+
+/**
+ * عند بداية شهر جديد: كل قراءة pending من فترة سابقة → billed
+ * وتُضاف قيمتها للمديونية، وتصبح القراءة الحالية هي السابقة.
+ */
+export async function billPendingReadings() {
+  const cur = getCurrentPeriod();
+  return db.transaction('rw', db.subscribers, db.movements, async () => {
+    const pend = (await db.movements.where('status').equals('pending')
+      .filter(m => m.type === 'read' && m.period < cur).toArray())
+      .sort((a, b) => String(a.period).localeCompare(String(b.period)));
+    let n = 0;
+    for (const m of pend) {
+      const sub = await db.subscribers.get(m.key);
+      if (!sub) continue;
+      await db.subscribers.update(m.key, {
+        dueAmount: (Number(sub.dueAmount) || 0) + (Number(m.estimatedInvoice) || 0),
+        count: (Number(sub.count) || 0) + 1,
+        prevReading: Number(m.reading) || 0,
+        months: 1
+      });
+      await db.movements.update(m.id, { status: 'billed', billedAt: new Date().toISOString() });
+      n++;
+    }
+    return n;
+  });
+}
+
+/* ============================================================
+   العرض
+============================================================ */
+
+/**
+ * رقم المشترك المختصر: يُخفي الثوابت (خط السير) ويُظهر المتغيرات.
+ * مثال: «بلوك 27 · عمارة 20 · شقة 07». لا يُعرض الكود الكامل أبداً.
+ * opts.withSector لإظهار القطاع.
+ */
+export function formatSubscriberRef(sub, lineOfRoute = null, opts = {}) {
+  if (!sub) return '';
+  const parts = [];
+  const lor = lineOfRoute || {};
+  if (lor.gov !== undefined && sub.gov !== lor.gov) parts.push(`${FIELD_LABELS.gov} ${sub.gov}`);
+  if (lor.region !== undefined && sub.region !== lor.region) parts.push(`${FIELD_LABELS.region} ${sub.region}`);
+  if (lor.route !== undefined && sub.route !== lor.route) parts.push(`${FIELD_LABELS.route} ${sub.route}`);
+  if (!lineOfRoute) { // بلا خط سير: اعرض ما يميّز الموقع كاملاً
+    if (!parts.length) parts.push(`${FIELD_LABELS.gov} ${sub.gov}`, `${FIELD_LABELS.region} ${sub.region}`, `${FIELD_LABELS.route} ${sub.route}`);
+  }
+  if (opts.withSector) parts.push(`${FIELD_LABELS.sector} ${sub.sector}`);
+  parts.push(`${FIELD_LABELS.blk} ${sub.blk}`, `${FIELD_LABELS.bld} ${sub.bld}`, `${FIELD_LABELS.apt} ${sub.apt}`);
+  if (sub.sub && sub.sub !== '00') parts.push(`${FIELD_LABELS.sub} ${sub.sub}`);
+  return parts.join(' · ');
 }
