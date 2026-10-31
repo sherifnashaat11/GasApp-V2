@@ -4,52 +4,98 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f2438">
-<title>محصّل الغاز - V2</title>
+<title>محصّل الغاز - V3</title>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
 <script src="dexie.min.js"></script>
 </head>
 <body data-theme="light">
+
 <header class="top">
   <div class="top-inner">
+    <!-- يمين: خروج + حالة الاتصال -->
     <div class="top-start">
-      <button id="exitBtn" class="ico power-btn" aria-label="خروج">
-        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3v9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+      <button id="exitBtn" class="ico power-btn" aria-label="خروج" title="خروج">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <path d="M12 3v9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+          <path d="M6.4 6.4a8 8 0 1 0 11.2 0" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+        </svg>
       </button>
       <span class="pill" id="netStatus">متصل</span>
     </div>
+
+    <!-- الوسط: الشعار + العنوان -->
     <div class="top-center">
-      <svg viewBox="0 0 48 48"><path d="M24 3c3 9 14 13 14 26a14 14 0 0 1-28 0c0-6 3-9 6-12 0 5 3 7 5 7-2-8 0-15 3-21z" fill="#f2a516"/><path d="M24 24c2 4 7 6 7 12a7 7 0 0 1-14 0c0-4 4-6 7-12z" fill="#1e6fa8"/></svg>
-      <div class="top-titles"><h1>محصّل الغاز</h1><p id="who">جاري التحميل...</p></div>
+      <svg viewBox="0 0 48 48">
+        <path d="M24 3c3 9 14 13 14 26a14 14 0 0 1-28 0c0-6 3-9 6-12 0 5 3 7 5 7-2-8 0-15 3-21z" fill="#f2a516"/>
+        <path d="M24 24c2 4 7 6 7 12a7 7 0 0 1-14 0c0-4 4-6 7-12z" fill="#1e6fa8"/>
+      </svg>
+      <div class="top-titles">
+        <h1>محصّل الغاز</h1>
+        <p id="who">جاري التحميل...</p>
+      </div>
     </div>
-    <div class="top-end"><button id="menuBtn" class="ico" aria-label="القائمة">⋮</button></div>
+
+    <!-- يسار: Home + القائمة -->
+    <div class="top-end">
+      <button id="homeBtn" class="ico" aria-label="الرئيسية" title="الرئيسية">🏠</button>
+      <button id="menuBtn" class="ico" aria-label="القائمة" title="القائمة">☰</button>
+    </div>
   </div>
 </header>
+
+<!-- القائمة المنسدلة الرئيسية -->
 <div id="menu" class="menu" hidden>
-  <button type="button" data-theme-pick="light">☀️ فاتح</button>
-  <button type="button" data-theme-pick="dark">🌙 داكن</button>
-  <button type="button" data-theme-pick="desert">🏜️ صحراوي</button>
-  <button type="button" data-theme-pick="highcontrast">🌑 ليلي عالي التباين</button>
+  <button type="button" data-nav="search">🔍 البحث</button>
+  <button type="button" data-nav="readings">📖 القراءات</button>
+  <button type="button" data-nav="ledger">✅ الأرشيف</button>
+  <button type="button" data-nav="details">📋 التفاصيل</button>
+  <button type="button" data-nav="settings">⚙️ الإعدادات</button>
+
+  <div class="submenu-wrap" id="themeWrap">
+    <button type="button" class="menu-item" id="themeToggle">
+      🌓 المظهر <span style="margin-right:auto;">▸</span>
+    </button>
+    <div class="submenu" id="themeSubmenu">
+      <button type="button" data-theme-pick="light">☀️ فاتح</button>
+      <button type="button" data-theme-pick="dark">🌙 داكن</button>
+      <button type="button" data-theme-pick="desert">🏜️ صحراوي</button>
+      <button type="button" data-theme-pick="highcontrast">🌑 ليلي عالي التباين</button>
+      <button type="button" data-theme-pick="green">🟢 أخضر</button>
+      <button type="button" data-theme-pick="orange">🟠 برتقالي</button>
+    </div>
+  </div>
 </div>
+
 <main id="app">
+  <!-- صفحة التحصيل (Home) -->
   <section id="view-home" class="view active"></section>
 
+  <!-- صفحة البحث -->
+  <section id="view-search" class="view"></section>
 
-<section id="view-ledger" class="view"></section>
-  
+  <!-- صفحة القراءات -->
+  <section id="view-readings" class="view"></section>
+
+  <!-- صفحة الأرشيف -->
+  <section id="view-ledger" class="view"></section>
+
+  <!-- صفحة التفاصيل (Placeholder) -->
+  <section id="view-details" class="view"></section>
+
+  <!-- صفحة الإعدادات (Placeholder) -->
+  <section id="view-settings" class="view"></section>
 </main>
 
-
-
+<!-- الشريط السفلي (التحصيل + الأرشيف) -->
 <nav class="tabs">
   <button data-tab="home" class="on"><span>📋</span> التحصيل</button>
-  <button data-tab="ledger"><span>✅</span> ما تم تحصيله</button>
+  <button data-tab="ledger"><span>✅</span> الأرشيف</button>
 </nav>
 
+<!-- iframe مخفي للطباعة -->
+<iframe id="printFrame" title="طباعة"></iframe>
 
-
-
-  
 <div id="toast"></div>
 <script type="module" src="app.js"></script>
 </body>
