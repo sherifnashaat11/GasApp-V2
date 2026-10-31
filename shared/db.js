@@ -536,7 +536,7 @@ export async function getUnreadSubscribers(period, lineOfRoute = null) {
   const reads = await db.movements.where('period').equals(period).filter(m => m.type === 'read').toArray();
   const readKeys = new Set(reads.map(r => r.key));
   let coll = lineOfRoute
-    ? db.subscribers.where('gov').equals(lineOfRoute.gov).filter(s => s.region === lineOfRoute.region && s.route === lineOfRoute.route)
+    ? db.subscribers.where('gov').equals(lineOfRoute.gov).filter(s => s.region === lineOfRoute.region && (lineOfRoute.route === undefined || s.route === lineOfRoute.route))
     : db.subscribers.toCollection();
   const subs = await coll.toArray();
   return subs.filter(s => Number(s.dueAmount) > 0 && !readKeys.has(s.key));
