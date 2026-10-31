@@ -37,7 +37,7 @@
   <div class="form-group">
     <div class="meta-row">
       <span>القراءة السابقة: <span id="prevReadDisplay" style="color:var(--primary);">0</span></span>
-      <span>المديونية: <span id="dueDisplay" style="color:var(--danger);">0</span> ج</span>
+      <span>المديونية الحالية: <span id="dueDisplay" style="color:var(--danger);">0</span> ج</span>
     </div>
 
     <div>
@@ -47,8 +47,7 @@
     
     <div class="calc-box">
       <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 m³</span></div>
-      <div class="calc-row"><span>الفاتورة التقديرية:</span><span id="invoiceVal">0 ج.م</span></div>
-      <div class="calc-row total"><span>إجمالي المطلوب:</span><span id="totalVal">0 ج.م</span></div>
+      <div class="calc-row total"><span>الفاتورة القادمة (التقديرية):</span><span id="invoiceVal">0 ج.م</span></div>
     </div>
   </div>
 
@@ -73,7 +72,6 @@
   
   let currentDue = 0;
 
-  // أسعار الشرائح
   const REAL_PRICES = { fees: 18, tiers: [{ limit: 30, price: 6 }, { limit: 60, price: 8 }, { limit: null, price: 12 }] };
 
   async function init() {
@@ -110,10 +108,9 @@
     }
     total += REAL_PRICES.fees;
     
+    // عرض الفاتورة القادمة فقط (بدون إضافة المديونية)
     document.getElementById('invoiceVal').textContent = `${total.toFixed(2)} ج.م`;
-    const grandTotal = currentDue + total;
-    document.getElementById('totalVal').textContent = `${grandTotal.toFixed(2)} ج.م`;
-    return { consumption, total, grandTotal };
+    return { consumption, total };
   }
 
   document.getElementById('v').addEventListener('input', function() {
