@@ -1,5 +1,5 @@
-import { db } from './shared/db.js';
-//import { db } from '../shared/db.js';
+//import { db } from './shared/db.js';
+import { db } from '../shared/db.js';
 import { importFromServer } from './importer.js';
 
 const $ = id => document.getElementById(id);
