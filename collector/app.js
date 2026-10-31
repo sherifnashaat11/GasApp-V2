@@ -117,6 +117,7 @@ async function ensureLineOfRoute() {
     lor = await inferLineOfRoute();
     if (lor) await setLineOfRoute(lor);
   }
+  if (lor) { lor = { ...lor }; delete lor.route; }   // اليومية = القطاع: تتبع القطاع المختار ولا تُثبَّت
   state.lineOfRoute = lor;
   return lor;
 }
@@ -124,7 +125,7 @@ async function ensureLineOfRoute() {
 async function loadRouteData() {
   const lor = await ensureLineOfRoute();
   const subs = lor
-    ? await db.subscribers.where('gov').equals(lor.gov).filter(s => s.region === lor.region && s.route === lor.route).toArray()
+    ? await db.subscribers.where('gov').equals(lor.gov).filter(s => s.region === lor.region).toArray()
     : [];
   state.subscribers = subs;
   state.byKey = new Map(subs.map(s => [s.key, s]));
@@ -136,7 +137,7 @@ async function loadRouteData() {
   });
   const reads = await db.movements.where('period').equals(getCurrentPeriod()).filter(m => m.type === 'read').toArray();
   state.readKeys = new Set(reads.map(r => r.key));
-  $('who').textContent = lor ? `خط السير: يومية ${lor.route} · منطقة ${regionName(lor.region)}` : 'بلا خط سير';
+  $('who').textContent = lor ? `خط السير · منطقة ${regionName(lor.region)}` : 'بلا خط سير';
 }
 
 const uniqSorted = (arr) => [...new Set(arr)].sort();
@@ -165,16 +166,15 @@ async function renderHome() {
   const totalRouteDue = blds.reduce((s, b) => s + b.apts.reduce((x, a) => x + (Number(a.dueAmount) || 0), 0), 0);
 
   // الثوابت (غير قابلة للتعديل)
-  let html = `<div class="card const-card" id="routeLabel" title="خط السير">
+  let html = `<div class="card const-card" id="routeLabel">
     <div class="chip"><small>محافظة</small><b>${escapeHtml(govName(lor.gov))}</b></div>
     <div class="chip"><small>منطقة</small><b>${escapeHtml(regionName(lor.region))}</b></div>
-    <div class="chip"><small>يومية</small><b>${escapeHtml(lor.route)}</b></div>
+    <div class="chip"><small>يومية (= القطاع)</small><b id="routeChip"></b></div>
     <div class="chip"><small>فرعي</small><b>${escapeHtml(lor.sub || '00')}</b></div>
   </div>`;
 
   if (!blds.length) {
-    view.innerHTML = html + `<div class="card empty">✅ لا توجد مديونيات في خط السير الحالي</div>`;
-    bindRouteLabel();
+    view.innerHTML = html.replace('<b id="routeChip"></b>', '<b>--</b>') + `<div class="card empty">✅ لا توجد مديونيات في خط السير الحالي</div>`;
     return;
   }
 
@@ -189,6 +189,8 @@ async function renderHome() {
   const aptVals = curBld ? uniqSorted(curBld.apts.map(a => a.apt)) : [];
   if (state.apt && !aptVals.includes(state.apt)) state.apt = '';
 
+  html = html.replace('<b id="routeChip"></b>', `<b>${escapeHtml(state.sector)}</b>`);
+  $('who').textContent = `خط السير · يومية ${state.sector} · منطقة ${regionName(lor.region)}`;
   html += `<div class="card"><div class="sel-grid">
     <div><label>القطاع</label><select id="selSector">${optHtml(secs, state.sector, 'قطاع')}</select></div>
     <div><label>البلوك</label><select id="selBlk">${optHtml(blks, state.blk, 'بلوك')}</select></div>
@@ -219,7 +221,6 @@ async function renderHome() {
     }).join('');
   }
   view.innerHTML = html;
-  bindRouteLabel();
   bindHomeEvents(curBld);
 }
 
@@ -241,33 +242,6 @@ function aptRowHome(a) {
       <button class="mini ${hasRead ? 'done' : 'read'}" data-act="read" data-key="${a.key}">${hasRead ? 'تعديل' : 'قراءة'}</button>
     </div>
   </div>`;
-}
-
-function bindRouteLabel() {
-  // تغيير خط السير: مؤقت (ضغطة مطوّلة) إلى أن تُبنى لوحة الأدمن — الثوابت غير قابلة للتعديل من الواجهة العادية
-  const el = $('routeLabel');
-  if (!el) return;
-  let timer;
-  const start = () => { timer = setTimeout(openRoutePicker, 900); };
-  const stop = () => clearTimeout(timer);
-  el.addEventListener('touchstart', start, { passive: true });
-  el.addEventListener('touchend', stop); el.addEventListener('touchmove', stop);
-  el.addEventListener('mousedown', start); el.addEventListener('mouseup', stop); el.addEventListener('mouseleave', stop);
-}
-
-async function openRoutePicker() {
-  const lor = state.lineOfRoute;
-  const routes = await listDistinct('route', s => s.gov === lor.gov && s.region === lor.region);
-  const d = makeDialog(`<h3>🛣️ تغيير خط السير</h3>
-    <p>(مؤقت — سيُدار من الأدمن لاحقاً)</p>
-    <div class="stack">${routes.map(r => `<button class="btn ${r === lor.route ? 'btn-primary' : 'btn-ghost'}" data-r="${r}">يومية ${r}</button>`).join('')}
-    <button class="btn btn-ghost" id="rpCancel">إلغاء</button></div>`);
-  $$('[data-r]', d).forEach(b => b.onclick = async () => {
-    state.lineOfRoute = await setLineOfRoute({ ...lor, route: b.dataset.r });
-    state.sector = state.blk = state.bld = state.apt = '';
-    d.close(); refreshAll();
-  });
-  $('rpCancel').onclick = () => d.close();
 }
 
 function bindHomeEvents(curBld) {
@@ -467,7 +441,6 @@ function bldLabel(s) {
   const p = [];
   if (s.gov !== lor.gov) p.push(`${FIELD_LABELS.gov} ${s.gov}`);
   if (s.region !== lor.region) p.push(`${FIELD_LABELS.region} ${s.region}`);
-  if (s.route !== lor.route) p.push(`${FIELD_LABELS.route} ${s.route}`);
   p.push(`${FIELD_LABELS.sector} ${s.sector}`, `${FIELD_LABELS.blk} ${s.blk}`, `${FIELD_LABELS.bld} ${s.bld}`);
   return p.join(' · ');
 }
