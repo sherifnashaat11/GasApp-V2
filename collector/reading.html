@@ -6,86 +6,25 @@
 <title>قراءة العداد</title>
 <script src="dexie.min.js"></script>
 <style>
-  /* ============================================================
-     الثيمات — نفس متغيرات style.css الرئيسي (مزامنة كاملة)
-  ============================================================ */
-  :root,
-  body[data-theme="light"] {
-    --bg: #f4f7fa; --card: #ffffff; --ink: #0f2438; --mute: #4a5f70;
-    --line: #d6e0e8; --primary: #7c3aed; --primary-ink: #ffffff;
-    --success: #0d9668; --success-ink: #ffffff; --danger: #d63a3a; --danger-ink: #ffffff;
-    --warning: #d97706; --warning-ink: #ffffff;
-  }
-  body[data-theme="dark"] {
-    --bg: #0a1722; --card: #1a2f42; --ink: #e7eff5; --mute: #a8bccb;
-    --line: #2a4257; --primary: #a78bfa; --primary-ink: #0a1722;
-    --success: #34d399; --success-ink: #0a1722; --danger: #f87171; --danger-ink: #0a1722;
-    --warning: #fbbf24; --warning-ink: #0a1722;
-  }
-  body[data-theme="desert"] {
-    --bg: #fdf6ec; --card: #fffaf0; --ink: #3b2a1a; --mute: #6b5540;
-    --line: #e6d3b8; --primary: #c2620a; --primary-ink: #ffffff;
-    --success: #15803d; --success-ink: #ffffff; --danger: #b91c1c; --danger-ink: #ffffff;
-    --warning: #a16207; --warning-ink: #ffffff;
-  }
-  body[data-theme="highcontrast"] {
-    --bg: #000000; --card: #111111; --ink: #ffffff; --mute: #cccccc;
-    --line: #333333; --primary: #b388ff; --primary-ink: #000000;
-    --success: #4ade80; --success-ink: #000000; --danger: #ff6b6b; --danger-ink: #000000;
-    --warning: #fbbf24; --warning-ink: #000000;
-  }
-  body[data-theme="green"] {
-    --bg: #eefaf0; --card: #ffffff; --ink: #0a3d1f; --mute: #3d6b4f;
-    --line: #c8e6d0; --primary: #0d9668; --primary-ink: #ffffff;
-    --success: #15803d; --success-ink: #ffffff; --danger: #dc2626; --danger-ink: #ffffff;
-    --warning: #ca8a04; --warning-ink: #ffffff;
-  }
-  body[data-theme="orange"] {
-    --bg: #fff7ed; --card: #ffffff; --ink: #3b1e0a; --mute: #7a4a1f;
-    --line: #f5d6b3; --primary: #ea580c; --primary-ink: #ffffff;
-    --success: #15803d; --success-ink: #ffffff; --danger: #b91c1c; --danger-ink: #ffffff;
-    --warning: #a16207; --warning-ink: #ffffff;
-  }
-
+  :root { --primary: #7c3aed; --bg: #f4f7fa; --card: #ffffff; --ink: #0c2233; --line: #d3dde4; --mute: #5b6f7d; --success: #0d9668; --danger: #d63a3a; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100dvh; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI', Tahoma, sans-serif; transition: background 0.25s, color 0.25s; }
+  html, body { height: 100dvh; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI', Tahoma, sans-serif; }
   .app-container { display: flex; flex-direction: column; height: 100%; max-width: 420px; margin: 0 auto; padding: 15px; }
-  
   .header-info { text-align: center; margin-bottom: 10px; }
   .header-info h1 { font-size: 1.2rem; color: var(--primary); font-weight: 800; }
   .header-info p { font-size: 0.85rem; color: var(--mute); margin-top: 5px; line-height: 1.4; }
-  
-  .form-group { background: var(--card); padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; overflow-y: auto; }
-  
-  label { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; display: block; color: var(--ink); }
+  .form-group { background: var(--card); padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
+  label { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; display: block; }
   input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.5rem; font-weight: 800; text-align: center; color: var(--primary); font-family: inherit; background: var(--bg); direction: ltr; }
   input:focus { outline: none; border-color: var(--primary); }
-  
-  .meta-row { display: flex; justify-content: space-between; background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; font-weight: bold; margin-bottom: 5px; color: var(--ink); }
-  .meta-row span span { color: var(--primary); }
-  .meta-row .due-val { color: var(--danger); }
-  
+  .meta-row { display: flex; justify-content: space-between; background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; font-weight: bold; margin-bottom: 5px; }
   .calc-box { background: var(--bg); border-radius: 10px; padding: 12px; border: 1px solid var(--line); margin-top: 5px; }
-  .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-bottom: 6px; color: var(--ink); }
+  .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-bottom: 6px; }
   .calc-row.total { font-size: 18px; color: var(--success); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
-  .calc-row .words { font-size: 11px; color: var(--mute); font-weight: normal; text-align: left; margin-top: 4px; }
-  
-  /* جدول التفصيل الشهري */
-  .detail-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
-  .detail-table th, .detail-table td { border: 1px solid var(--line); padding: 6px 4px; text-align: center; color: var(--ink); }
-  .detail-table th { background: var(--card); font-weight: 800; }
-  .detail-table .tier-name { text-align: right; }
-  .detail-table .cost-col { font-weight: bold; color: var(--success); }
-  
   .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
   button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: 0.2s; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  #saveBtn { background: var(--primary); color: var(--primary-ink); }
-  #saveBtn:hover:not(:disabled) { opacity: 0.9; }
+  #saveBtn { background: var(--primary); color: #fff; }
   #cancelBtn { background: transparent; color: var(--mute); border: 2px solid var(--line); }
-  #cancelBtn:hover { background: var(--bg); }
-  
-  .hint { font-size: 11px; color: var(--mute); text-align: center; margin-top: 5px; }
 </style>
 </head>
 <body>
@@ -97,223 +36,111 @@
   
   <div class="form-group">
     <div class="meta-row">
-      <span>القراءة السابقة: <span id="prevReadDisplay">0</span></span>
-      <span>المديونية: <span id="dueDisplay" class="due-val">0</span> ج</span>
+      <span>القراءة السابقة: <span id="prevReadDisplay" style="color:var(--primary);">0</span></span>
+      <span>المديونية الحالية: <span id="dueDisplay" style="color:var(--danger);">0</span> ج</span>
     </div>
 
     <div>
       <label>القراءة الحالية (حد أقصى 5 أرقام)</label>
       <input id="v" type="number" maxlength="5" inputmode="numeric" autocomplete="off" placeholder="00000">
-      <div class="hint">أدخل القراءة الحالية للعداد</div>
     </div>
     
     <div class="calc-box">
       <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 m³</span></div>
-      <div id="detailRows"></div>
-      <div class="calc-row total"><span>الفاتورة القادمة:</span><span id="invoiceVal">0 ج.م</span></div>
-      <div class="calc-row"><span class="words" id="wordsVal"></span></div>
+      <div class="calc-row total"><span>الفاتورة القادمة (التقديرية):</span><span id="invoiceVal">0 ج.م</span></div>
     </div>
   </div>
 
   <div class="actions">
-    <button id="saveBtn" disabled>حفظ القراءة</button>
+    <button id="saveBtn">حفظ القراءة</button>
     <button id="cancelBtn">إلغاء</button>
   </div>
 </div>
 
 <script type="module">
-  import { db, calcNextInvoice, recordReading, getCurrentPeriod } from '../shared/db.js';
+  import { db } from '../shared/db.js';
 
-  // ============================================================
-  // 1. مزامنة الثيم مع النافذة الأم (parent)
-  // ============================================================
-  function syncTheme() {
-    try {
-      const parentTheme = window.parent && window.parent.localStorage
-        ? window.parent.localStorage.getItem('app-theme')
-        : null;
-      const theme = parentTheme || localStorage.getItem('app-theme') || 'light';
-      document.body.setAttribute('data-theme', theme);
-    } catch (e) {
-      // في حالة iframe عبر أصل مختلف
-      document.body.setAttribute('data-theme', localStorage.getItem('app-theme') || 'light');
-    }
-  }
-  syncTheme();
-
-  // ============================================================
-  // 2. قراءة معاملات URL
-  // ============================================================
   const p = new URLSearchParams(location.search);
   const key = p.get('k');
   const name = p.get('n') || 'بدون اسم';
   const addr = p.get('a') || '';
-  let prevReading = Number(p.get('p')) || 0;
-  const billingMonths = Number(p.get('m')) || 1;
-  const period = getCurrentPeriod(); // ← الفترة الديناميكية (بدل الثابت)
+  const prevReading = Number(p.get('p')) || 0;
+  const billingMonths = Number(p.get('m')) || 1; 
 
   document.getElementById('clientInfo').innerHTML = `<b>${name}</b><br>${addr}`;
   document.getElementById('prevReadDisplay').textContent = prevReading;
   
   let currentDue = 0;
-  let currentCalc = null;
 
-  // ============================================================
-  // 3. التهيئة (جلب المديونية + القراءة السابقة + القراءة المحفوظة)
-  // ============================================================
+  const REAL_PRICES = { fees: 18, tiers: [{ limit: 30, price: 6 }, { limit: 60, price: 8 }, { limit: null, price: 12 }] };
+
   async function init() {
     if (!key) return alert('خطأ: لم يتم تمرير كود العميل');
-    
     const sub = await db.subscribers.get(key);
     if (sub) {
       currentDue = Number(sub.dueAmount) || 0;
       document.getElementById('dueDisplay').textContent = currentDue;
-      
-      // إذا لم تُمرَّر القراءة السابقة في URL، نأخذها من العميل
-      if (!p.get('p')) {
-        prevReading = Number(sub.prevReading) || 0;
-        document.getElementById('prevReadDisplay').textContent = prevReading;
-      }
     }
     
-    // جلب القراءة المحفوظة مسبقاً (إن وجدت) لهذه الفترة
-    const existing = await db.movements
-      .where({ key, period })
-      .filter(m => m.type === 'read')
-      .first();
-      
-    if (existing && existing.reading) {
-      document.getElementById('v').value = existing.reading;
-      calculate(existing.reading);
+    const move = await db.movements.where({ key: key }).first();
+    if (move && move.reading) {
+      document.getElementById('v').value = move.reading;
+      calculate(move.reading);
     }
   }
 
-  // ============================================================
-  // 4. الحساب (باستخدام calcNextInvoice من db.js)
-  // ============================================================
   function calculate(currentReading) {
-    if (!currentReading || currentReading < prevReading) {
-      document.getElementById('consumptionVal').textContent = '0 m³';
-      document.getElementById('invoiceVal').textContent = '0 ج.م';
-      document.getElementById('wordsVal').textContent = '';
-      document.getElementById('detailRows').innerHTML = '';
-      currentCalc = null;
-      document.getElementById('saveBtn').disabled = true;
-      return;
+    const consumption = Math.max(0, currentReading - prevReading);
+    document.getElementById('consumptionVal').textContent = `${consumption} m³`;
+    
+    let remaining = consumption;
+    let total = 0;
+    let prevLimit = 0;
+
+    for (let i = 0; i < REAL_PRICES.tiers.length; i++) {
+      if (remaining <= 0) break;
+      const tier = REAL_PRICES.tiers[i];
+      let cap = (tier.limit === null) ? remaining : Math.max(0, tier.limit - prevLimit);
+      const used = Math.min(remaining, cap);
+      total += used * tier.price;
+      remaining -= used;
+      if (tier.limit !== null) prevLimit = tier.limit;
     }
+    total += REAL_PRICES.fees;
     
-    const result = calcNextInvoice({
-      reading: currentReading,
-      prevReading: prevReading,
-      months: billingMonths,
-      fees: 18, // سيتم جلبها من meta لاحقاً إن لزم
-      periods: undefined // يستخدم DEFAULT_PERIODS
-    });
-    
-    currentCalc = result;
-    
-    document.getElementById('consumptionVal').textContent = `${result.cons} m³`;
-    document.getElementById('invoiceVal').textContent = `${result.grandTotal} ج.م`;
-    document.getElementById('wordsVal').textContent = result.words ? `(${result.words})` : '';
-    
-    // عرض التفصيل الشهري
-    if (result.rows && result.rows.length > 0) {
-      let html = `<table class="detail-table"><thead><tr><th>الشريحة</th><th>الاستهلاك</th><th>السعر</th><th>التكلفة</th></tr></thead><tbody>`;
-      result.rows.forEach(r => {
-        html += `<tr>
-          <td class="tier-name">${r.name}</td>
-          <td>${r.used.toFixed(1)} m³</td>
-          <td>${r.price.toFixed(2)}</td>
-          <td class="cost-col">${r.cost.toFixed(2)} ج</td>
-        </tr>`;
-      });
-      html += `<tr style="font-weight:bold; background:var(--bg);">
-        <td colspan="3" class="tier-name">الرسوم الثابتة (مرة واحدة)</td>
-        <td class="cost-col">${result.fees.toFixed(2)} ج</td>
-      </tr>`;
-      html += `</tbody></table>`;
-      document.getElementById('detailRows').innerHTML = html;
-    } else {
-      document.getElementById('detailRows').innerHTML = '';
-    }
-    
-    document.getElementById('saveBtn').disabled = false;
+    // عرض الفاتورة القادمة فقط (بدون إضافة المديونية)
+    document.getElementById('invoiceVal').textContent = `${total.toFixed(2)} ج.م`;
+    return { consumption, total };
   }
 
-  // ============================================================
-  // 5. أحداث الإدخال
-  // ============================================================
   document.getElementById('v').addEventListener('input', function() {
     if (this.value.length > 5) this.value = this.value.slice(0, 5);
     calculate(Number(this.value) || 0);
   });
 
-  // ============================================================
-  // 6. حفظ القراءة
-  // ============================================================
   document.getElementById('saveBtn').onclick = async () => {
     const val = Number(document.getElementById('v').value);
-    if (!val || val < prevReading) {
-      return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
-    }
+    if (!val || val < prevReading) return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
     
-    if (!currentCalc) return alert('⚠️ يرجى إدخال قراءة صحيحة أولاً');
+    const result = calculate(val);
     
     try {
-      // التحقق من وجود قراءة سابقة لنفس الفترة (type === 'read')
-      const existing = await db.movements
-        .where({ key, period })
-        .filter(m => m.type === 'read')
-        .first();
-      
+      const existing = await db.movements.where({ key: key }).first();
       if (existing) {
-        // تحديث القراءة الموجودة
-        await db.movements.update(existing.id, {
-          reading: val,
-          prevReading: prevReading,
-          consumption: currentCalc.cons,
-          estimatedInvoice: currentCalc.grandTotal,
-          months: billingMonths,
-          date: new Date().toISOString()
-        });
+        await db.movements.update(existing.id, { reading: val, consumption: result.consumption, estimatedInvoice: result.total, date: new Date().toISOString() });
       } else {
-        // إضافة قراءة جديدة
-        await recordReading({
-          key: key,
-          reading: val,
-          prevReading: prevReading,
-          consumption: currentCalc.cons,
-          estimatedInvoice: currentCalc.grandTotal,
-          months: billingMonths,
-          period: period
-        });
+        await db.movements.add({ key: key, period: '2026-11', reading: val, prevReading: prevReading, consumption: result.consumption, estimatedInvoice: result.total, months: billingMonths, status: 'pending', date: new Date().toISOString() });
       }
-      
-      // إبلاغ النافذة الأم
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'READING_SAVED' }, '*');
-      } else {
-        window.close();
-      }
-    } catch (err) {
-      alert('خطأ: ' + err.message);
-    }
+      if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_SAVED' }, '*');
+      else window.close();
+    } catch (err) { alert('خطأ: ' + err.message); }
   };
 
-  // ============================================================
-  // 7. إلغاء
-  // ============================================================
   document.getElementById('cancelBtn').onclick = () => {
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
-    } else {
-      window.close();
-    }
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
+    else window.close();
   };
 
-  // ============================================================
-  // 8. تشغيل التهيئة
-  // ============================================================
   init();
 </script>
 </body>
