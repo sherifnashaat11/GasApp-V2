@@ -4,173 +4,316 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>قراءة العداد</title>
-<link rel="stylesheet" href="style.css">
 <script src="dexie.min.js"></script>
 <style>
-  html, body { height: 100%; overflow: hidden; }
-  body { min-height: 0; }
-  .rd { display: flex; flex-direction: column; height: 100dvh; max-width: 420px; margin: 0 auto; padding: 14px; gap: 10px; }
-  .rd-head { text-align: center; }
-  .rd-head h1 { font-size: 1.15rem; color: var(--primary); font-weight: 800; }
-  .rd-head p { font-size: .85rem; color: var(--mute); margin-top: 4px; line-height: 1.5; }
-  .rd-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 6px; }
-  .rd-box { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; }
-  .meta-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 800; }
-  .meta-row .v-prev { color: var(--primary); }
-  .meta-row .v-due { color: var(--danger); }
-  .rd label { display: block; font-weight: 800; font-size: .9rem; margin-bottom: 6px; }
-  .rd input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.6rem; font-weight: 800; text-align: center; color: var(--primary); background: var(--bg); direction: ltr; font-family: inherit; }
-  .rd input:focus { outline: none; border-color: var(--primary); }
-  .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 800; margin-bottom: 6px; }
+  /* ============================================================
+     الثيمات — نفس متغيرات style.css الرئيسي (مزامنة كاملة)
+  ============================================================ */
+  :root,
+  body[data-theme="light"] {
+    --bg: #f4f7fa; --card: #ffffff; --ink: #0f2438; --mute: #4a5f70;
+    --line: #d6e0e8; --primary: #7c3aed; --primary-ink: #ffffff;
+    --success: #0d9668; --success-ink: #ffffff; --danger: #d63a3a; --danger-ink: #ffffff;
+    --warning: #d97706; --warning-ink: #ffffff;
+  }
+  body[data-theme="dark"] {
+    --bg: #0a1722; --card: #1a2f42; --ink: #e7eff5; --mute: #a8bccb;
+    --line: #2a4257; --primary: #a78bfa; --primary-ink: #0a1722;
+    --success: #34d399; --success-ink: #0a1722; --danger: #f87171; --danger-ink: #0a1722;
+    --warning: #fbbf24; --warning-ink: #0a1722;
+  }
+  body[data-theme="desert"] {
+    --bg: #fdf6ec; --card: #fffaf0; --ink: #3b2a1a; --mute: #6b5540;
+    --line: #e6d3b8; --primary: #c2620a; --primary-ink: #ffffff;
+    --success: #15803d; --success-ink: #ffffff; --danger: #b91c1c; --danger-ink: #ffffff;
+    --warning: #a16207; --warning-ink: #ffffff;
+  }
+  body[data-theme="highcontrast"] {
+    --bg: #000000; --card: #111111; --ink: #ffffff; --mute: #cccccc;
+    --line: #333333; --primary: #b388ff; --primary-ink: #000000;
+    --success: #4ade80; --success-ink: #000000; --danger: #ff6b6b; --danger-ink: #000000;
+    --warning: #fbbf24; --warning-ink: #000000;
+  }
+  body[data-theme="green"] {
+    --bg: #eefaf0; --card: #ffffff; --ink: #0a3d1f; --mute: #3d6b4f;
+    --line: #c8e6d0; --primary: #0d9668; --primary-ink: #ffffff;
+    --success: #15803d; --success-ink: #ffffff; --danger: #dc2626; --danger-ink: #ffffff;
+    --warning: #ca8a04; --warning-ink: #ffffff;
+  }
+  body[data-theme="orange"] {
+    --bg: #fff7ed; --card: #ffffff; --ink: #3b1e0a; --mute: #7a4a1f;
+    --line: #f5d6b3; --primary: #ea580c; --primary-ink: #ffffff;
+    --success: #15803d; --success-ink: #ffffff; --danger: #b91c1c; --danger-ink: #ffffff;
+    --warning: #a16207; --warning-ink: #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100dvh; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI', Tahoma, sans-serif; transition: background 0.25s, color 0.25s; }
+  .app-container { display: flex; flex-direction: column; height: 100%; max-width: 420px; margin: 0 auto; padding: 15px; }
+  
+  .header-info { text-align: center; margin-bottom: 10px; }
+  .header-info h1 { font-size: 1.2rem; color: var(--primary); font-weight: 800; }
+  .header-info p { font-size: 0.85rem; color: var(--mute); margin-top: 5px; line-height: 1.4; }
+  
+  .form-group { background: var(--card); padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; overflow-y: auto; }
+  
+  label { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; display: block; color: var(--ink); }
+  input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.5rem; font-weight: 800; text-align: center; color: var(--primary); font-family: inherit; background: var(--bg); direction: ltr; }
+  input:focus { outline: none; border-color: var(--primary); }
+  
+  .meta-row { display: flex; justify-content: space-between; background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; font-weight: bold; margin-bottom: 5px; color: var(--ink); }
+  .meta-row span span { color: var(--primary); }
+  .meta-row .due-val { color: var(--danger); }
+  
+  .calc-box { background: var(--bg); border-radius: 10px; padding: 12px; border: 1px solid var(--line); margin-top: 5px; }
+  .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-bottom: 6px; color: var(--ink); }
   .calc-row.total { font-size: 18px; color: var(--success); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
-  .words { font-size: 12px; color: var(--mute); margin-top: 4px; line-height: 1.6; }
-  .tbl-wrap { overflow-x: auto; margin-top: 6px; }
-  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  .tbl th, .tbl td { border: 1px solid var(--line); padding: 6px 4px; text-align: center; }
-  .tbl th { background: var(--bg); font-weight: 800; }
-  .tbl td.sub { color: var(--mute); font-size: 11.5px; text-align: right; }
-  .rd-actions { display: flex; flex-direction: column; gap: 8px; }
-  .rd-actions button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.05rem; font-weight: 800; cursor: pointer; }
+  .calc-row .words { font-size: 11px; color: var(--mute); font-weight: normal; text-align: left; margin-top: 4px; }
+  
+  /* جدول التفصيل الشهري */
+  .detail-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  .detail-table th, .detail-table td { border: 1px solid var(--line); padding: 6px 4px; text-align: center; color: var(--ink); }
+  .detail-table th { background: var(--card); font-weight: 800; }
+  .detail-table .tier-name { text-align: right; }
+  .detail-table .cost-col { font-weight: bold; color: var(--success); }
+  
+  .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+  button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: 0.2s; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
   #saveBtn { background: var(--primary); color: var(--primary-ink); }
-  #saveBtn:disabled { opacity: .5; }
+  #saveBtn:hover:not(:disabled) { opacity: 0.9; }
   #cancelBtn { background: transparent; color: var(--mute); border: 2px solid var(--line); }
-  .err { color: var(--danger); font-size: 13px; font-weight: 800; min-height: 18px; text-align: center; }
+  #cancelBtn:hover { background: var(--bg); }
+  
+  .hint { font-size: 11px; color: var(--mute); text-align: center; margin-top: 5px; }
 </style>
 </head>
-<body data-theme="light">
-<div class="rd">
-  <div class="rd-head">
+<body>
+<div class="app-container">
+  <div class="header-info">
     <h1>قراءة العداد</h1>
     <p id="clientInfo">جاري التحميل...</p>
   </div>
-
-  <div class="rd-body">
-    <div class="rd-box">
-      <div class="meta-row">
-        <span>القراءة السابقة: <span id="prevReadDisplay" class="v-prev">0</span></span>
-        <span>أشهر المحاسبة: <span id="monthsDisplay" class="v-prev">1</span></span>
-        <span>المديونية: <span id="dueDisplay" class="v-due">0</span> ج</span>
-      </div>
+  
+  <div class="form-group">
+    <div class="meta-row">
+      <span>القراءة السابقة: <span id="prevReadDisplay">0</span></span>
+      <span>المديونية: <span id="dueDisplay" class="due-val">0</span> ج</span>
     </div>
 
-    <div class="rd-box">
-      <label for="v">القراءة الحالية (حد أقصى 5 أرقام)</label>
-      <input id="v" type="number" inputmode="numeric" autocomplete="off" placeholder="00000">
-      <div class="err" id="err"></div>
+    <div>
+      <label>القراءة الحالية (حد أقصى 5 أرقام)</label>
+      <input id="v" type="number" maxlength="5" inputmode="numeric" autocomplete="off" placeholder="00000">
+      <div class="hint">أدخل القراءة الحالية للعداد</div>
     </div>
-
-    <div class="rd-box">
-      <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 م³</span></div>
-      <div class="calc-row"><span>المتوسط الشهري:</span><span id="avgVal">0 م³</span></div>
-      <div class="tbl-wrap" id="breakdown"></div>
-      <div class="calc-row" style="margin-top:8px"><span>الرسوم (مرة واحدة):</span><span id="feesVal">0 ج.م</span></div>
-      <div class="calc-row total"><span>الفاتورة القادمة (تقديرية):</span><span id="invoiceVal">0 ج.م</span></div>
-      <div class="words" id="wordsVal"></div>
+    
+    <div class="calc-box">
+      <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 m³</span></div>
+      <div id="detailRows"></div>
+      <div class="calc-row total"><span>الفاتورة القادمة:</span><span id="invoiceVal">0 ج.م</span></div>
+      <div class="calc-row"><span class="words" id="wordsVal"></span></div>
     </div>
   </div>
 
-  <div class="rd-actions">
-    <button id="saveBtn">حفظ القراءة</button>
+  <div class="actions">
+    <button id="saveBtn" disabled>حفظ القراءة</button>
     <button id="cancelBtn">إلغاء</button>
   </div>
 </div>
 
 <script type="module">
-  import { db, initDb, calcNextInvoice, recordReading, getReadingForPeriod, getCurrentPeriod } from '../shared/db.js';
+  import { db, calcNextInvoice, recordReading, getCurrentPeriod } from '../shared/db.js';
 
-  const $ = (id) => document.getElementById(id);
+  // ============================================================
+  // 1. مزامنة الثيم مع النافذة الأم (parent)
+  // ============================================================
+  function syncTheme() {
+    try {
+      const parentTheme = window.parent && window.parent.localStorage
+        ? window.parent.localStorage.getItem('app-theme')
+        : null;
+      const theme = parentTheme || localStorage.getItem('app-theme') || 'light';
+      document.body.setAttribute('data-theme', theme);
+    } catch (e) {
+      // في حالة iframe عبر أصل مختلف
+      document.body.setAttribute('data-theme', localStorage.getItem('app-theme') || 'light');
+    }
+  }
+  syncTheme();
+
+  // ============================================================
+  // 2. قراءة معاملات URL
+  // ============================================================
   const p = new URLSearchParams(location.search);
   const key = p.get('k');
-  const period = getCurrentPeriod();            // لا فترة ثابتة
+  const name = p.get('n') || 'بدون اسم';
+  const addr = p.get('a') || '';
   let prevReading = Number(p.get('p')) || 0;
-  let months = Number(p.get('m')) || 1;
-  let last = null;                               // آخر حساب
+  const billingMonths = Number(p.get('m')) || 1;
+  const period = getCurrentPeriod(); // ← الفترة الديناميكية (بدل الثابت)
 
-  /* ---- مزامنة الثيم مع الصفحة الأم ---- */
-  const syncTheme = () => document.body.setAttribute('data-theme', localStorage.getItem('app-theme') || 'light');
-  syncTheme();
-  window.addEventListener('storage', (e) => { if (e.key === 'app-theme') syncTheme(); });
-  window.addEventListener('message', (e) => { if (e.data && e.data.type === 'THEME') syncTheme(); });
+  document.getElementById('clientInfo').innerHTML = `<b>${name}</b><br>${addr}`;
+  document.getElementById('prevReadDisplay').textContent = prevReading;
+  
+  let currentDue = 0;
+  let currentCalc = null;
 
-  const fmt = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
-  const post = (type) => {
-    if (window.parent && window.parent !== window) window.parent.postMessage({ type }, '*');
-    else window.close();
-  };
-
-  $('clientInfo').innerHTML = '';
-  const b = document.createElement('b'); b.textContent = p.get('n') || 'بدون اسم';
-  $('clientInfo').append(b, document.createElement('br'), document.createTextNode(p.get('a') || ''));
-
-  function render(reading) {
-    const inv = calcNextInvoice({ reading, prevReading, months, period });
-    last = inv;
-    $('consumptionVal').textContent = `${fmt(inv.cons)} م³`;
-    $('avgVal').textContent = `${fmt(inv.avg)} م³`;
-    $('feesVal').textContent = `${fmt(inv.fees)} ج.م`;
-    $('invoiceVal').textContent = `${fmt(inv.grandTotal)} ج.م`;
-    $('wordsVal').textContent = inv.cons > 0 || reading ? `${inv.words} جنيهاً مصرياً فقط لا غير` : '';
-
-    // تفصيل شهري
-    const rows = inv.rows.map(r => {
-      const detail = r.tiers.map(t => `${t.name}: ${fmt(t.qty)}×${fmt(t.price)}`).join(' + ') || '—';
-      return `<tr><td>${r.month}</td><td class="sub">${detail}</td><td>${fmt(r.cost)}</td></tr>`;
-    }).join('');
-    $('breakdown').innerHTML = `<table class="tbl"><thead><tr><th>الشهر</th><th>الشرائح</th><th>التكلفة</th></tr></thead><tbody>${rows}</tbody></table>`;
-    return inv;
-  }
-
+  // ============================================================
+  // 3. التهيئة (جلب المديونية + القراءة السابقة + القراءة المحفوظة)
+  // ============================================================
   async function init() {
-    if (!key) { $('err').textContent = 'خطأ: لم يتم تمرير كود العميل'; $('saveBtn').disabled = true; return; }
-    await initDb();
+    if (!key) return alert('خطأ: لم يتم تمرير كود العميل');
+    
     const sub = await db.subscribers.get(key);
     if (sub) {
-      if (!p.has('p')) prevReading = Number(sub.prevReading) || 0;
-      if (!p.has('m')) months = Number(sub.months) || 1;
-      $('dueDisplay').textContent = fmt(Number(sub.dueAmount) || 0);
-      if (!p.has('n')) $('clientInfo').textContent = sub.name || '';
+      currentDue = Number(sub.dueAmount) || 0;
+      document.getElementById('dueDisplay').textContent = currentDue;
+      
+      // إذا لم تُمرَّر القراءة السابقة في URL، نأخذها من العميل
+      if (!p.get('p')) {
+        prevReading = Number(sub.prevReading) || 0;
+        document.getElementById('prevReadDisplay').textContent = prevReading;
+      }
     }
-    $('prevReadDisplay').textContent = prevReading;
-    $('monthsDisplay').textContent = months;
-
-    const existing = await getReadingForPeriod(key, period);   // قراءة فعلية فقط (لا سداد)
-    if (existing && existing.reading !== undefined) {
-      $('v').value = existing.reading;
-      render(existing.reading);
-    } else {
-      render(0);
+    
+    // جلب القراءة المحفوظة مسبقاً (إن وجدت) لهذه الفترة
+    const existing = await db.movements
+      .where({ key, period })
+      .filter(m => m.type === 'read')
+      .first();
+      
+    if (existing && existing.reading) {
+      document.getElementById('v').value = existing.reading;
+      calculate(existing.reading);
     }
-    $('v').focus();
   }
 
-  $('v').addEventListener('input', function () {
+  // ============================================================
+  // 4. الحساب (باستخدام calcNextInvoice من db.js)
+  // ============================================================
+  function calculate(currentReading) {
+    if (!currentReading || currentReading < prevReading) {
+      document.getElementById('consumptionVal').textContent = '0 m³';
+      document.getElementById('invoiceVal').textContent = '0 ج.م';
+      document.getElementById('wordsVal').textContent = '';
+      document.getElementById('detailRows').innerHTML = '';
+      currentCalc = null;
+      document.getElementById('saveBtn').disabled = true;
+      return;
+    }
+    
+    const result = calcNextInvoice({
+      reading: currentReading,
+      prevReading: prevReading,
+      months: billingMonths,
+      fees: 18, // سيتم جلبها من meta لاحقاً إن لزم
+      periods: undefined // يستخدم DEFAULT_PERIODS
+    });
+    
+    currentCalc = result;
+    
+    document.getElementById('consumptionVal').textContent = `${result.cons} m³`;
+    document.getElementById('invoiceVal').textContent = `${result.grandTotal} ج.م`;
+    document.getElementById('wordsVal').textContent = result.words ? `(${result.words})` : '';
+    
+    // عرض التفصيل الشهري
+    if (result.rows && result.rows.length > 0) {
+      let html = `<table class="detail-table"><thead><tr><th>الشريحة</th><th>الاستهلاك</th><th>السعر</th><th>التكلفة</th></tr></thead><tbody>`;
+      result.rows.forEach(r => {
+        html += `<tr>
+          <td class="tier-name">${r.name}</td>
+          <td>${r.used.toFixed(1)} m³</td>
+          <td>${r.price.toFixed(2)}</td>
+          <td class="cost-col">${r.cost.toFixed(2)} ج</td>
+        </tr>`;
+      });
+      html += `<tr style="font-weight:bold; background:var(--bg);">
+        <td colspan="3" class="tier-name">الرسوم الثابتة (مرة واحدة)</td>
+        <td class="cost-col">${result.fees.toFixed(2)} ج</td>
+      </tr>`;
+      html += `</tbody></table>`;
+      document.getElementById('detailRows').innerHTML = html;
+    } else {
+      document.getElementById('detailRows').innerHTML = '';
+    }
+    
+    document.getElementById('saveBtn').disabled = false;
+  }
+
+  // ============================================================
+  // 5. أحداث الإدخال
+  // ============================================================
+  document.getElementById('v').addEventListener('input', function() {
     if (this.value.length > 5) this.value = this.value.slice(0, 5);
-    $('err').textContent = '';
-    render(Number(this.value) || 0);
+    calculate(Number(this.value) || 0);
   });
 
-  $('saveBtn').onclick = async () => {
-    const raw = $('v').value;
-    const val = Number(raw);
-    if (raw === '' || Number.isNaN(val)) { $('err').textContent = '⚠️ أدخل القراءة الحالية'; return; }
-    if (val < prevReading) { $('err').textContent = '⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي السابقة'; return; }
-    $('saveBtn').disabled = true;
+  // ============================================================
+  // 6. حفظ القراءة
+  // ============================================================
+  document.getElementById('saveBtn').onclick = async () => {
+    const val = Number(document.getElementById('v').value);
+    if (!val || val < prevReading) {
+      return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
+    }
+    
+    if (!currentCalc) return alert('⚠️ يرجى إدخال قراءة صحيحة أولاً');
+    
     try {
-      const inv = render(val);
-      await recordReading({
-        key, reading: val, prevReading, consumption: inv.cons,
-        estimatedInvoice: inv.grandTotal, months, period,
-        invoice: { rows: inv.rows, fees: inv.fees, grandTotal: inv.grandTotal, words: inv.words, avg: inv.avg }
-      });
-      post('READING_SAVED');
+      // التحقق من وجود قراءة سابقة لنفس الفترة (type === 'read')
+      const existing = await db.movements
+        .where({ key, period })
+        .filter(m => m.type === 'read')
+        .first();
+      
+      if (existing) {
+        // تحديث القراءة الموجودة
+        await db.movements.update(existing.id, {
+          reading: val,
+          prevReading: prevReading,
+          consumption: currentCalc.cons,
+          estimatedInvoice: currentCalc.grandTotal,
+          months: billingMonths,
+          date: new Date().toISOString()
+        });
+      } else {
+        // إضافة قراءة جديدة
+        await recordReading({
+          key: key,
+          reading: val,
+          prevReading: prevReading,
+          consumption: currentCalc.cons,
+          estimatedInvoice: currentCalc.grandTotal,
+          months: billingMonths,
+          period: period
+        });
+      }
+      
+      // إبلاغ النافذة الأم
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'READING_SAVED' }, '*');
+      } else {
+        window.close();
+      }
     } catch (err) {
-      $('err').textContent = 'خطأ: ' + err.message;
-      $('saveBtn').disabled = false;
+      alert('خطأ: ' + err.message);
     }
   };
 
-  $('cancelBtn').onclick = () => post('READING_CANCEL');
+  // ============================================================
+  // 7. إلغاء
+  // ============================================================
+  document.getElementById('cancelBtn').onclick = () => {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
+    } else {
+      window.close();
+    }
+  };
 
+  // ============================================================
+  // 8. تشغيل التهيئة
+  // ============================================================
   init();
 </script>
 </body>
