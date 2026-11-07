@@ -169,8 +169,8 @@ async function renderHome() {
   let html = `<div class="card const-card" id="routeLabel">
     <div class="chip"><small>محافظة</small><b>${escapeHtml(govName(lor.gov))}</b></div>
     <div class="chip"><small>منطقة</small><b>${escapeHtml(regionName(lor.region))}</b></div>
-    //<div class="chip"><small>يومية (= القطاع)</small><b id="routeChip"></b></div>
-    <div class="chip"><small> يومية</small><b id="routeChip"></b></div>
+    <div class="chip"><small>يومية (= القطاع)</small><b id="routeChip"></b></div>
+   
     <div class="chip"><small>فرعي</small><b>${escapeHtml(lor.sub || '00')}</b></div>
   </div>`;
 
