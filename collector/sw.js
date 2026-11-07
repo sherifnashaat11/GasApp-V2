@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gas-v2-cache-v162'; // V3.2
+const CACHE_NAME = 'gas-v2-cache-v163'; // V3.2
 const ASSETS = [
   './index.html',
   './app.js',
