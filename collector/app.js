@@ -1,5 +1,5 @@
 /* ============================================================
-   collector/app.js - V3.2 (Complete Clean Build)
+   collector/app.js - V3.2 (Full Complete Build)
 ============================================================ */
 
 /* ===================== 1) Imports ===================== */
@@ -375,11 +375,11 @@ function bindHomeEvents(curBld) {
     const sub = state.byKey.get(b.dataset.key);
     if (!sub) return;
     if (b.dataset.act === 'notify') {
-      if (typeof openNotifyModal === 'function') openNotifyModal(sub);
+      openNotifyModal(sub);
     } else if (b.dataset.act === 'pay') {
-      if (typeof openPaymentModal === 'function') openPaymentModal(sub, 'route');
+      openPaymentModal(sub, 'route');
     } else {
-      if (typeof openReadingDialog === 'function') openReadingDialog(sub);
+      openReadingDialog(sub);
     }
   });
 }
@@ -559,9 +559,9 @@ async function showBuildingResult(bldKey, highlightKey) {
   $$('[data-act]', box).forEach(b => b.onclick = () => {
     const sub = byKey.get(b.dataset.key);
     if (b.dataset.act === 'pay') {
-      if (typeof openPaymentModal === 'function') openPaymentModal(sub, 'search');
+      openPaymentModal(sub, 'search');
     } else {
-      if (typeof openReadingDialog === 'function') openReadingDialog(sub);
+      openReadingDialog(sub);
     }
   });
 }
@@ -669,7 +669,7 @@ function bindReadingsEvents(curBld) {
   $$('[data-key]', $('view-readings')).forEach(b => {
     b.onclick = async () => {
       const sub = await db.subscribers.get(b.dataset.key);
-      if (sub && typeof openReadingDialog === 'function') openReadingDialog(sub);
+      if (sub) openReadingDialog(sub);
     };
   });
 }
@@ -779,47 +779,7 @@ async function renderSettings() {
   }
 }
 
-/* ===================== 12) App Initialization ===================== */
-document.addEventListener('DOMContentLoaded', async () => {
-  initTheme();
-  bindMenu();
-  try {
-    await initDb();
-    
-    // فحص إذا كانت قاعدة البيانات فارغة لعرض زر الاستيراد البدائي فوراً
-    const count = await db.subscribers.count();
-    if (count === 0) {
-      const view = $('view-home');
-      if (view) {
-        view.innerHTML = `<div class="card empty">
-          <h2>لا توجد بيانات مسجلة</h2>
-          <p>يرجى تحميل ملف العملاء لبدء العمل</p>
-          <button id="btnFetchInit" class="btn btn-primary" style="margin-top:12px">📥 تحميل ملف العملاء</button>
-        </div>`;
-        const btn = $('btnFetchInit');
-        if (btn) {
-          btn.onclick = async () => {
-            try { 
-              await importFromServer(() => {}); 
-              state.subscribers = null; 
-              switchTab('home');
-            } catch (e) { 
-              toast('فشل التحميل: ' + e.message); 
-            }
-          };
-        }
-      }
-    } else {
-      switchTab('home');
-    }
-  } catch (e) {
-    console.error("Initialization Error:", e);
-  }
-});
-
-
-/* ===================== دوال النوافذ التفاعلية (التحصيل، القراءة، الإخطار) ===================== */
-
+/* ===================== 12) النوافذ التفاعلية (تحصيل، قراءة، إخطار) ===================== */
 function openPaymentModal(sub, source = 'route') {
   const d = makeDialog(`
     <h3>تحصيل مديونية: ${escapeHtml(sub.name)}</h3>
@@ -887,12 +847,6 @@ function openReadingDialog(sub) {
         date: new Date().toISOString(),
         status: 'pending'
       });
-
-
-
-
-
-
       d.close();
       toast('تم حفظ القراءة بنجاح');
       state.subscribers = null;
@@ -900,6 +854,7 @@ function openReadingDialog(sub) {
     } catch (e) {
       toast('خطأ في حفظ القراءة: ' + e.message);
     }
+  };
 }
 
 function openNotifyModal(sub) {
@@ -921,5 +876,39 @@ function openNotifyModal(sub) {
   };
 }
 
-
-     
+/* ===================== 13) App Initialization ===================== */
+document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
+  bindMenu();
+  try {
+    await initDb();
+    
+    const count = await db.subscribers.count();
+    if (count === 0) {
+      const view = $('view-home');
+      if (view) {
+        view.innerHTML = `<div class="card empty">
+          <h2>لا توجد بيانات مسجلة</h2>
+          <p>يرجى تحميل ملف العملاء لبدء العمل</p>
+          <button id="btnFetchInit" class="btn btn-primary" style="margin-top:12px">📥 تحميل ملف العملاء</button>
+        </div>`;
+        const btn = $('btnFetchInit');
+        if (btn) {
+          btn.onclick = async () => {
+            try { 
+              await importFromServer(() => {}); 
+              state.subscribers = null; 
+              switchTab('home');
+            } catch (e) { 
+              toast('فشل التحميل: ' + e.message); 
+            }
+          };
+        }
+      }
+    } else {
+      switchTab('home');
+    }
+  } catch (e) {
+    console.error("Initialization Error:", e);
+  }
+});
