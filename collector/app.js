@@ -122,7 +122,7 @@ async function ensureLineOfRoute() {
   return lor;
 }
 //----------------------------------------------------------------------------------------------
-/*
+
 async function loadRouteData() {
   const lor = await ensureLineOfRoute();
   const subs = lor
@@ -179,11 +179,12 @@ async function renderHome() {
     view.innerHTML = html.replace('<b id="routeChip"></b>', '<b>--</b>') + `<div class="card empty">✅ لا توجد مديونيات في خط السير الحالي</div>`;
     return;
   }
-  */
+  
 
 
 
-/* ===================== 6) renderHome المتطور والمرن ===================== */
+/*
+===================== 6) renderHome المتطور والمرن ===================== 
 
 async function loadRouteData() {
   // جلب كافة العملاء في قاعدة البيانات (لتفعيل المرونة التامة بين المحافظات والمناطق)
@@ -277,7 +278,7 @@ async function renderHome() {
     bindHeaderEvents();
     return;
   }
-
+*/
   // المتغيرات: قطاع / بلوك / عمارة / شقة
   const secs = uniqSorted(blds.map(b => b.sector));
   if (!secs.includes(state.sector)) { state.sector = secs[0]; state.blk = ''; state.bld = ''; state.apt = ''; }
