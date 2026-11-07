@@ -816,3 +816,110 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error("Initialization Error:", e);
   }
 });
+
+
+/* ===================== دوال النوافذ التفاعلية (التحصيل، القراءة، الإخطار) ===================== */
+
+function openPaymentModal(sub, source = 'route') {
+  const d = makeDialog(`
+    <h3>تحصيل مديونية: ${escapeHtml(sub.name)}</h3>
+    <p>المبلغ المستحق: <b>${fmtMoney(sub.dueAmount)}</b></p>
+    <div style="margin:12px 0">
+      <label>المبلغ المراد تحصيله:</label>
+      <input id="payAmount" type="number" value="${sub.dueAmount}" style="width:100%;padding:8px;margin-top:4px">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="cancelPay" class="btn ghost">إلغاء</button>
+      <button id="confirmPay" class="btn btn-success">تأكيد السداد</button>
+    </div>
+  `);
+  d.querySelector('#cancelPay').onclick = () => d.close();
+  d.querySelector('#confirmPay').onclick = async () => {
+    const amt = Number(d.querySelector('#payAmount').value);
+    if (!amt || amt <= 0) { toast('أدخل مبلغاً صحيحاً'); return; }
+    try {
+      const move = await recordPayment({
+        key: sub.key,
+        name: sub.name,
+        amount: amt,
+        count: sub.count,
+        source: source,
+        partial: amt < Number(sub.dueAmount)
+      });
+      d.close();
+      toast('تم السداد بنجاح');
+      state.subscribers = null;
+      if (typeof showReceipt === 'function') await showReceipt([move]);
+      refreshAll();
+    } catch (e) {
+      toast('خطأ في السداد: ' + e.message);
+    }
+  };
+}
+
+function openReadingDialog(sub) {
+  const d = makeDialog(`
+    <h3>تسجيل قراءة: ${escapeHtml(sub.name)}</h3>
+    <p>القراءة السابقة: <b>${sub.prevReading || 0}</b></p>
+    <div style="margin:12px 0">
+      <label>القراءة الحالية:</label>
+      <input id="currReading" type="number" placeholder="أدخل القراءة الحالية" style="width:100%;padding:8px;margin-top:4px">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="cancelRead" class="btn ghost">إلغاء</button>
+      <button id="confirmRead" class="btn btn-primary">حفظ القراءة</button>
+    </div>
+  `);
+  const input = d.querySelector('#currReading');
+  input.focus();
+  d.querySelector('#cancelRead').onclick = () => d.close();
+  d.querySelector('#confirmRead').onclick = async () => {
+    const val = Number(input.value);
+    if (isNaN(val)) { toast('أدخل قراءة صحيحة'); return; }
+    try {
+      await db.movements.add({
+        key: sub.key,
+        name: sub.name,
+        type: 'read',
+        reading: val,
+        prevReading: sub.prevReading || 0,
+        period: getCurrentPeriod(),
+        date: new Date().toISOString(),
+        status: 'pending'
+      });
+
+
+
+
+
+
+      d.close();
+      toast('تم حفظ القراءة بنجاح');
+      state.subscribers = null;
+      refreshAll();
+    } catch (e) {
+      toast('خطأ في حفظ القراءة: ' + e.message);
+    }
+}
+
+function openNotifyModal(sub) {
+  const ref = refOf(sub, { withSector: true });
+  const msg = `تنبيه من شركة الغاز: العميل ${sub.name} (${ref})، يوجد مديونية مستحقة بقيمة ${fmtMoney(sub.dueAmount)}. يرجى السداد في أقرب وقت.`;
+  const d = makeDialog(`
+    <h3>إخطار العملاء</h3>
+    <textarea readonly style="width:100%;height:100px;padding:8px;margin:8px 0">${msg}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="closeNotify" class="btn ghost">إغلاق</button>
+      <button id="copyNotify" class="btn btn-primary">📋 نسخ النص</button>
+    </div>
+  `);
+  d.querySelector('#closeNotify').onclick = () => d.close();
+  d.querySelector('#copyNotify').onclick = () => {
+    navigator.clipboard.writeText(msg);
+    toast('تم نسخ النص بنجاح');
+    d.close();
+  };
+}
+
+
+     
