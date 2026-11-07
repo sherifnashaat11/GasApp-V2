@@ -121,7 +121,8 @@ async function ensureLineOfRoute() {
   state.lineOfRoute = lor;
   return lor;
 }
-
+//----------------------------------------------------------------------------------------------
+/*
 async function loadRouteData() {
   const lor = await ensureLineOfRoute();
   const subs = lor
@@ -178,7 +179,182 @@ async function renderHome() {
     view.innerHTML = html.replace('<b id="routeChip"></b>', '<b>--</b>') + `<div class="card empty">✅ لا توجد مديونيات في خط السير الحالي</div>`;
     return;
   }
+  */
 
+
+
+/* ===================== 6) renderHome المتطور والمرن ===================== */
+
+async function loadRouteData() {
+  // جلب كافة العملاء في قاعدة البيانات (لتفعيل المرونة التامة بين المحافظات والمناطق)
+  const allSubs = await db.subscribers.toArray();
+  state.allSubscribers = allSubs;
+
+  // استخراج المحافظات المتاحة
+  const govs = uniqSorted(allSubs.map(s => s.gov));
+  if (!state.searchGov || !govs.includes(state.searchGov)) {
+    state.searchGov = govs[0] || '';
+  }
+
+  // استخراج المناطق التابعة للمحافظة المختارة
+  const regs = uniqSorted(allSubs.filter(s => s.gov === state.searchGov).map(s => s.region));
+  if (!state.searchRegion || !regs.includes(state.searchRegion)) {
+    state.searchRegion = regs[0] || '';
+  }
+
+  // فلترة العملاء بناءً على المحافظة والمنطقة المختارتين
+  const subs = allSubs.filter(s => s.gov === state.searchGov && s.region === state.searchRegion);
+  state.subscribers = subs;
+  state.byKey = new Map(subs.map(s => [s.key, s]));
+  
+  state.buildings = {};
+  subs.forEach(s => {
+    if (Number(s.dueAmount) <= 0) return; // المسدَّد يختفي من التحصيل ويظهر في البحث والأرشيف
+    const b = state.buildings[s.bldKey] || (state.buildings[s.bldKey] = { 
+      bldKey: s.bldKey, sector: s.sector, blk: s.blk, bld: s.bld, apts: [] 
+    });
+    b.apts.push(s);
+  });
+
+  const reads = await db.movements.where('period').equals(getCurrentPeriod()).filter(m => m.type === 'read').toArray();
+  state.readKeys = new Set(reads.map(r => r.key));
+  $('who').textContent = `خط السير · ${govName(state.searchGov)} · ${regionName(state.searchRegion)}`;
+}
+
+async function renderHome() {
+  const view = $('view-home');
+  removeSelectionBar();
+  if (!state.digitCfg.gov) state.digitCfg = await getDigitConfig();
+  state.govMap = await getGovMap(); 
+  state.regionMap = await getRegionMap();
+  
+  if (state.subscribers === null) await loadRouteData();
+
+  if ((await db.subscribers.count()) === 0) {
+    view.innerHTML = `<div class="card empty"><h2>لا توجد بيانات</h2><button id="btnFetch" class="btn btn-primary" style="margin-top:12px">📥 تحميل ملف العملاء</button></div>`;
+    $('btnFetch').onclick = async () => {
+      try { await importFromServer(() => {}); } catch (e) { return; }
+      state.subscribers = null; renderHome();
+    };
+    return;
+  }
+
+  const allSubs = state.allSubscribers || [];
+  const govs = uniqSorted(allSubs.map(s => s.gov));
+  const regs = uniqSorted(allSubs.filter(s => s.gov === state.searchGov).map(s => s.region));
+  const subsInRegion = state.subscribers || [];
+  const subsSubs = uniqSorted(subsInRegion.map(s => s.sub || '00'));
+  
+  // التحكم في مرونة الفرعي: هل يحتوي على قيم تختلف عن 00؟
+  const hasMultipleSubs = subsSubs.length > 1 || (subsSubs.length === 1 && subsSubs[0] !== '00');
+
+  // شريط فلترة خط السير الديناميكي (محافظة / منطقة / فرعي)
+  let html = `<div class="card const-card" id="routeLabel" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px;">
+    <div class="chip">
+      <small>محافظة</small>
+      <select id="selGov" style="border:none;background:transparent;font-weight:bold;width:100%">${optHtml(govs, state.searchGov, '', '')}</select>
+    </div>
+    <div class="chip">
+      <small>منطقة</small>
+      <select id="selRegion" style="border:none;background:transparent;font-weight:bold;width:100%">${optHtml(regs, state.searchRegion, '', '')}</select>
+    </div>
+    ${hasMultipleSubs ? `
+    <div class="chip">
+      <small>فرعي</small>
+      <input id="inpSub" value="${escapeHtml(state.currentSub || subsSubs[0])}" style="border:none;background:transparent;font-weight:bold;width:100%;text-align:center">
+    </div>` : `
+    <div class="chip">
+      <small>فرعي</small>
+      <b>00</b>
+    </div>`}
+  </div>`;
+
+  const blds = Object.values(state.buildings);
+  const totalRouteDue = blds.reduce((s, b) => s + b.apts.reduce((x, a) => x + (Number(a.dueAmount) || 0), 0), 0);
+
+  if (!blds.length) {
+    view.innerHTML = html + `<div class="card empty">✅ لا توجد مديونيات في المنطقة المختارة</div>`;
+    bindHeaderEvents();
+    return;
+  }
+
+  // المتغيرات: قطاع / بلوك / عمارة / شقة
+  const secs = uniqSorted(blds.map(b => b.sector));
+  if (!secs.includes(state.sector)) { state.sector = secs[0]; state.blk = ''; state.bld = ''; state.apt = ''; }
+  const blks = uniqSorted(blds.filter(b => b.sector === state.sector).map(b => b.blk));
+  if (!blks.includes(state.blk)) { state.blk = blks[0]; state.bld = ''; state.apt = ''; }
+  const bldList = blds.filter(b => b.sector === state.sector && b.blk === state.blk).sort((a, b) => a.bld.localeCompare(b.bld));
+  if (state.bld && !bldList.some(b => b.bld === state.bld)) { state.bld = ''; state.apt = ''; }
+  const curBld = bldList.find(b => b.bld === state.bld) || null;
+  const aptVals = curBld ? uniqSorted(curBld.apts.map(a => a.apt)) : [];
+  if (state.apt && !aptVals.includes(state.apt)) state.apt = '';
+
+  html += `<div class="card"><div class="sel-grid">
+    <div><label>القطاع</label><select id="selSector">${optHtml(secs, state.sector, 'قطاع')}</select></div>
+    <div><label>البلوك</label><select id="selBlk">${optHtml(blks, state.blk, 'بلوك')}</select></div>
+    <div><label>العمارة</label><select id="selBld">${optHtml(bldList.map(b => b.bld), state.bld, 'عمارة', '-- كل العمارات --')}</select></div>
+    <div><label>الشقة</label><select id="selApt" ${curBld ? '' : 'disabled'}>${optHtml(aptVals, state.apt, 'شقة', '-- كل الشقق --')}</select></div>
+  </div></div>`;
+
+  if (curBld) {
+    const apts = curBld.apts.filter(a => !state.apt || a.apt === state.apt)
+      .sort((a, b) => (a.apt + a.sub).localeCompare(b.apt + b.sub));
+    const totalDue = curBld.apts.reduce((s, a) => s + (Number(a.dueAmount) || 0), 0);
+    html += `<div class="card">
+      <div class="row-title">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="btnBack" class="mini ghost">⏪ رجوع</button>
+          <h3>عمارة ${curBld.bld} <span style="color:var(--danger);font-size:13px">(${fmtMoney(totalDue)})</span></h3>
+        </div>
+        <button id="btnSelectAll" class="mini read">تحديد الكل</button>
+      </div>
+      ${apts.map(a => aptRowHome(a)).join('')}
+    </div>`;
+  } else {
+    html += `<div class="card" style="text-align:center;font-weight:800">إجمالي خط السير: <span style="color:var(--danger)">${fmtMoney(totalRouteDue)}</span></div>`;
+    html += bldList.map((b, i) => {
+      const due = b.apts.reduce((s, a) => s + (Number(a.dueAmount) || 0), 0);
+      return `<div class="bld-card" data-bld="${b.bld}" style="background:color-mix(in srgb, var(--primary) ${[0, 3, 6, 9][i % 4]}%, var(--card))">
+        <div><b>عمارة ${b.bld}</b><div class="apt-sub">${b.apts.length} عميل</div></div><div class="due">${fmtMoney(due)}</div></div>`;
+    }).join('');
+  }
+
+  view.innerHTML = html;
+  bindHeaderEvents();
+  bindHomeEvents(curBld);
+}
+
+function bindHeaderEvents() {
+  const selGov = $('selGov');
+  if (selGov) selGov.onchange = (e) => {
+    state.searchGov = e.target.value;
+    state.searchRegion = '';
+    state.subscribers = null;
+    renderHome();
+  };
+
+  const selRegion = $('selRegion');
+  if (selRegion) selRegion.onchange = (e) => {
+    state.searchRegion = e.target.value;
+    state.subscribers = null;
+    renderHome();
+  };
+
+  const inpSub = $('inpSub');
+  if (inpSub) inpSub.oninput = (e) => {
+    state.currentSub = e.target.value;
+  };
+}
+
+
+
+
+
+
+
+
+
+//------------------------------------------------------------------------------------------------------------
   // المتغيرات: قطاع / بلوك / عمارة / شقة
   const secs = uniqSorted(blds.map(b => b.sector));
   if (!secs.includes(state.sector)) { state.sector = secs[0]; state.blk = ''; state.bld = ''; state.apt = ''; }
