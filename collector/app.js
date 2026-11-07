@@ -15,7 +15,7 @@ import { importFromServer } from './importer.js';
 /* ===================== 2) State + Helpers ===================== */
 const state = {
   sector: '', blk: '', bld: '', apt: '',
-  subscribers: null,           // null = يحتاج إعادة تحميل
+  subscribers: null,
   allSubscribers: [],
   byKey: new Map(), buildings: {}, readKeys: new Set(),
   searchMode: 'code', searchGov: '', searchRegion: '', searchQuery: '',
@@ -59,7 +59,6 @@ function makeDialog(html, style = '') {
   return d;
 }
 
-/** إعادة رسم الصفحة الحالية بعد أي تغيير في البيانات */
 function refreshAll() {
   state.subscribers = null;
   switchTab(currentTab, true);
@@ -68,7 +67,7 @@ function refreshAll() {
 /* ===================== 3) الثيمات ===================== */
 function applyTheme(theme) {
   document.body.setAttribute('data-theme', theme);
-  try { localStorage.setItem('app-theme', theme); } catch (e) { /* تجاهل */ }
+  try { localStorage.setItem('app-theme', theme); } catch (e) {}
   $$('[data-theme-pick]').forEach(b => b.classList.toggle('active', b.dataset.themePick === theme));
   const colors = { light: '#ffffff', dark: '#0a1722', desert: '#f5e6d0', highcontrast: '#000000', green: '#e6f4ea', orange: '#fff3e6' };
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -76,7 +75,7 @@ function applyTheme(theme) {
 }
 function initTheme() {
   let t = 'light';
-  try { t = localStorage.getItem('app-theme') || 'light'; } catch (e) { /* تجاهل */ }
+  try { t = localStorage.getItem('app-theme') || 'light'; } catch (e) {}
   applyTheme(t);
 }
 
