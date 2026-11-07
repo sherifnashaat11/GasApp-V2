@@ -1,9 +1,7 @@
 /* ============================================================
-   collector/app.js - V3.2
-   14 قسماً + init — انظر عناوين الأقسام أدناه
+   collector/app.js - V3.2 (Clean Unified Build)
 ============================================================ */
 
-/* ===================== 1) Imports ===================== */
 import {
   db, initDb, buildBldKey, normalizeName, recordPayment, getUnreadSubscribers, searchByFullCode,
   searchByName, getCurrentPeriod, getBuildingWithMovements, getDigitConfig, getLineOfRoute,
@@ -12,7 +10,6 @@ import {
 } from '../shared/db.js';
 import { importFromServer } from './importer.js';
 
-/* ===================== 2) State + Helpers ===================== */
 const state = {
   sector: '', blk: '', bld: '', apt: '',
   subscribers: null,
@@ -35,6 +32,7 @@ function toast(msg, ms = 2200) {
   clearTimeout(toast._t);
   toast._t = setTimeout(() => t.classList.remove('show'), ms);
 }
+
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtMoney = (n) => `${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })} ج`;
 const fmtDate = (d) => new Date(d).toLocaleString('ar-EG');
@@ -42,8 +40,7 @@ function debounce(fn, ms = 250) {
   let t;
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
-const digitsOnly = (v) => String(v ?? '')
-  .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
+const digitsOnly = (v) => String(v ?? '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/\D/g, '');
 const bldDigits = () => FIELD_ORDER.slice(0, 6).reduce((n, f) => n + (state.digitCfg[f] || 2), 0);
 const govName = (c) => state.govMap[c] ? `${state.govMap[c]}` : c;
 const regionName = (c) => state.regionMap[c] ? `${state.regionMap[c]}` : c;
@@ -64,7 +61,6 @@ function refreshAll() {
   switchTab(currentTab, true);
 }
 
-/* ===================== 3) الثيمات ===================== */
 function applyTheme(theme) {
   document.body.setAttribute('data-theme', theme);
   try { localStorage.setItem('app-theme', theme); } catch (e) {}
@@ -73,13 +69,13 @@ function applyTheme(theme) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && colors[theme]) meta.setAttribute('content', colors[theme]);
 }
+
 function initTheme() {
   let t = 'light';
   try { t = localStorage.getItem('app-theme') || 'light'; } catch (e) {}
   applyTheme(t);
 }
 
-/* ===================== 4) القائمة ===================== */
 function closeMenu() { $('menu').hidden = true; $('themeWrap').classList.remove('open'); }
 function bindMenu() {
   $('menuBtn').onclick = (e) => { e.stopPropagation(); const h = $('menu').hidden; closeMenu(); $('menu').hidden = !h; };
@@ -94,7 +90,6 @@ function bindMenu() {
   window.addEventListener('online', net); window.addEventListener('offline', net); net();
 }
 
-/* ===================== 5) switchTab ===================== */
 function removeSelectionBar() { const b = $('selectionBar'); if (b) b.remove(); }
 
 function switchTab(tab, keepScroll = false) {
@@ -109,7 +104,6 @@ function switchTab(tab, keepScroll = false) {
   (map[tab] || renderHome)();
 }
 
-/* ===================== 6) renderHome ===================== */
 async function ensureLineOfRoute() {
   if (state.lineOfRoute) return state.lineOfRoute;
   let lor = await getLineOfRoute();
@@ -351,7 +345,6 @@ function updateSelectionBar() {
   };
 }
 
-/* ===================== 7) renderSearch ===================== */
 async function renderSearch() {
   const view = $('view-search');
   if (!state.digitCfg.gov) state.digitCfg = await getDigitConfig();
@@ -502,7 +495,6 @@ function bldLabel(s) {
   return p.join(' · ');
 }
 
-/* ===================== 8) renderReadings ===================== */
 async function renderReadings() {
   const view = $('view-readings');
   removeSelectionBar();
@@ -599,3 +591,15 @@ function bindReadingsEvents(curBld) {
     };
   });
 }
+
+// تهيئة التطبيق عند التحميل
+document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
+  bindMenu();
+  try {
+    await initDb();
+  } catch (e) {
+    console.error("DB Init Error:", e);
+  }
+  switchTab('home');
+});
