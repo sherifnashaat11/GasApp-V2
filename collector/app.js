@@ -445,7 +445,7 @@ function bldLabel(s) {
   return p.join(' · ');
 }
 
-/* ===================== 8) renderReadings ===================== */
+/* ===================== 8) renderReadings ===================== 
 async function renderReadings() {
   const view = $('view-readings');
   await ensureLineOfRoute();
@@ -464,6 +464,119 @@ async function renderReadings() {
       <div class="apt-actions"><button class="mini read" data-key="${s.key}">قراءة</button></div></div>`).join('');
   $$('[data-key]', view).forEach(b => b.onclick = () => openReadingDialog(byKey.get(b.dataset.key)));
 }
+*/
+
+
+
+
+
+/* ===================== 8) renderReadings ===================== */
+async function renderReadings() {
+  const view = $('view-readings');
+  removeSelectionBar();
+  await ensureLineOfRoute();
+  
+  if (!state.digitCfg.gov) state.digitCfg = await getDigitConfig();
+  state.govMap = await getGovMap(); state.regionMap = await getRegionMap();
+  
+  const list = await getUnreadSubscribers(getCurrentPeriod(), state.lineOfRoute);
+  if (!list.length) { 
+    view.innerHTML = `<div class="card empty">✅ تم تسجيل قراءات كل العملاء لهذا الشهر</div>`; 
+    return; 
+  }
+
+  // تجميع القراءات بناءً على العمارات (bldKey) تماماً مثل التحصيل
+  const buildings = {};
+  list.forEach(s => {
+    const b = buildings[s.bldKey] || (buildings[s.bldKey] = { bldKey: s.bldKey, sector: s.sector, blk: s.blk, bld: s.bld, apts: [] });
+    b.apts.push(s);
+  });
+
+  const bldList = Object.values(buildings);
+  const secs = uniqSorted(bldList.map(b => b.sector));
+  if (!secs.includes(state.sector)) { state.sector = secs[0]; state.blk = ''; state.bld = ''; }
+  const blks = uniqSorted(bldList.filter(b => b.sector === state.sector).map(b => b.blk));
+  if (!blks.includes(state.blk)) { state.blk = blks[0]; state.bld = ''; }
+  const currentBlds = bldList.filter(b => b.sector === state.sector && b.blk === state.blk).sort((a, b) => a.bld.localeCompare(b.bld));
+  if (state.bld && !currentBlds.some(b => b.bld === state.bld)) { state.bld = ''; }
+  
+  const curBld = currentBlds.find(b => b.bld === state.bld) || null;
+
+  let html = `<div class="card summary" style="font-size:15px">إجمالي بانتظار القراءة: ${list.length} عميل</div>`;
+
+  // فلاتر القطاع والبلوك والعمارة للقراءات
+  html += `<div class="card"><div class="sel-grid">
+    <div><label>القطاع</label><select id="rSelSector">${optHtml(secs, state.sector, 'قطاع')}</select></div>
+    <div><label>البلوك</label><select id="rSelBlk">${optHtml(blks, state.blk, 'بلوك')}</select></div>
+    <div><label>العمارة</label><select id="rSelBld">${optHtml(currentBlds.map(b => b.bld), state.bld, 'عمارة', '-- كل العمارات --')}</select></div>
+  </div></div>`;
+
+  if (curBld) {
+    const apts = curBld.apts.sort((a, b) => (a.apt + a.sub).localeCompare(b.apt + b.sub));
+    html += `<div class="card">
+      <div class="row-title">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="rBtnBack" class="mini ghost">⏪ رجوع</button>
+          <h3>عمارة ${curBld.bld} <span style="color:var(--primary);font-size:13px">(${apts.names || apts.length} شقة غير مسجلة)</span></h3>
+        </div>
+      </div>
+      ${apts.map(s => aptRowReading(s)).join('')}
+    </div>`;
+  } else {
+    html += currentBlds.map((b, i) => {
+      return `<div class="bld-card r-bld-card" data-bld="${b.bld}" style="background:color-mix(in srgb, var(--primary) ${[0, 3, 6, 9][i % 4]}%, var(--card))">
+        <div><b>عمارة ${b.bld}</b><div class="apt-sub">${b.apts.length} عميل بانتظار القراءة</div></div><div class="due" style="font-size:14px;color:var(--primary)">قراءة 📋</div></div>`;
+    }).join('');
+  }
+
+  view.innerHTML = html;
+  bindReadingsEvents(curBld);
+}
+
+function aptRowReading(s) {
+  return `<div class="card apt-card" style="margin-bottom:8px">
+    <div class="apt-main">
+      <div style="min-width:0">
+        <div class="apt-name">${escapeHtml(s.name)}</div>
+        <div class="apt-sub">${escapeHtml(refOf(s, { withSector: true }))}</div>
+        <div class="apt-sub">القراءة السابقة: <b>${s.prevReading}</b> · أشهر المحاسبة: <b>${s.months || 1}</b></div>
+        <div class="apt-due">المديونية: ${fmtMoney(s.dueAmount)}</div>
+      </div>
+    </div>
+    <div class="apt-actions">
+      <button class="mini read" data-key="${s.key}">تسجيل قراءة</button>
+    </div>
+  </div>`;
+}
+
+function bindReadingsEvents(curBld) {
+  const sel = (id, fn) => { const e = $(id); if (e) e.onchange = (ev) => { fn(ev.target.value); renderReadings(); }; };
+  sel('rSelSector', v => { state.sector = v; state.blk = ''; state.bld = ''; });
+  sel('rSelBlk', v => { state.blk = v; state.bld = ''; });
+  sel('rSelBld', v => { state.bld = v; });
+  
+  $$('.r-bld-card').forEach(c => c.onclick = () => { state.bld = c.dataset.bld; renderReadings(); });
+  
+  if (curBld) {
+    const backBtn = $('rBtnBack');
+    if (backBtn) backBtn.onclick = () => { state.bld = ''; renderReadings(); };
+  }
+
+  $$('[data-key]', $('view-readings')).forEach(b => {
+    b.onclick = async () => {
+      const sub = await db.subscribers.get(b.dataset.key);
+      if (sub) openReadingDialog(sub);
+    };
+  });
+}
+
+
+
+
+
+
+
+
 
 /* ===================== 9) renderLedger ===================== */
 async function renderLedger() {
