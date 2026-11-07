@@ -122,7 +122,7 @@ async function ensureLineOfRoute() {
   return lor;
 }
 //----------------------------------------------------------------------------------------------
-
+/*
 async function loadRouteData() {
   const lor = await ensureLineOfRoute();
   const subs = lor
@@ -183,7 +183,7 @@ async function renderHome() {
 
 
 
-/*
+
 ===================== 6) renderHome المتطور والمرن ===================== 
 
 async function loadRouteData() {
@@ -279,6 +279,112 @@ async function renderHome() {
     return;
   }
 */
+
+//======================Sherif
+
+
+
+
+
+
+
+async function loadRouteData() {
+  const allSubs = await db.subscribers.toArray();
+  state.allSubscribers = allSubs;
+
+  const govs = uniqSorted(allSubs.map(s => s.gov));
+  if (!state.searchGov || !govs.includes(state.searchGov)) {
+    state.searchGov = govs[0] || '';
+  }
+
+  const regs = uniqSorted(allSubs.filter(s => s.gov === state.searchGov).map(s => s.region));
+  if (!state.searchRegion || !regs.includes(state.searchRegion)) {
+    state.searchRegion = regs[0] || '';
+  }
+
+  const subs = allSubs.filter(s => s.gov === state.searchGov && s.region === state.searchRegion);
+  state.subscribers = subs;
+  state.byKey = new Map(subs.map(s => [s.key, s]));
+  
+  state.buildings = {};
+  subs.forEach(s => {
+    if (Number(s.dueAmount) <= 0) return;
+    const b = state.buildings[s.bldKey] || (state.buildings[s.bldKey] = { 
+      bldKey: s.bldKey, sector: s.sector, blk: s.blk, bld: s.bld, apts: [] 
+    });
+    b.apts.push(s);
+  });
+
+  const reads = await db.movements.where('period').equals(getCurrentPeriod()).filter(m => m.type === 'read').toArray();
+  state.readKeys = new Set(reads.map(r => r.key));
+  $('who').textContent = `خط السير · ${govName(state.searchGov)} · ${regionName(state.searchRegion)}`;
+}
+
+const uniqSorted = (arr) => [...new Set(arr)].sort();
+const optHtml = (vals, sel, label, withAll) =>
+  (withAll ? `<option value="">${withAll}</option>` : '') +
+  vals.map(v => `<option value="${v}" ${v === sel ? 'selected' : ''}>${label} ${v}</option>`).join('');
+
+async function renderHome() {
+  const view = $('view-home');
+  removeSelectionBar();
+  if (!state.digitCfg.gov) state.digitCfg = await getDigitConfig();
+  state.govMap = await getGovMap(); 
+  state.regionMap = await getRegionMap();
+  
+  if (state.subscribers === null) await loadRouteData();
+
+  if ((await db.subscribers.count()) === 0) {
+    view.innerHTML = `<div class="card empty"><h2>لا توجد بيانات</h2><button id="btnFetch" class="btn btn-primary" style="margin-top:12px">📥 تحميل ملف العملاء</button></div>`;
+    $('btnFetch').onclick = async () => {
+      try { await importFromServer(() => {}); } catch (e) { return; }
+      state.subscribers = null; renderHome();
+    };
+    return;
+  }
+
+  const allSubs = state.allSubscribers || [];
+  const govs = uniqSorted(allSubs.map(s => s.gov));
+  const regs = uniqSorted(allSubs.filter(s => s.gov === state.searchGov).map(s => s.region));
+  const subsInRegion = state.subscribers || [];
+  const subsSubs = uniqSorted(subsInRegion.map(s => s.sub || '00'));
+  
+  const hasMultipleSubs = subsSubs.length > 1 || (subsSubs.length === 1 && subsSubs[0] !== '00');
+
+  let html = `<div class="card const-card" id="routeLabel" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:8px;">
+    <div class="chip">
+      <small>محافظة</small>
+      <select id="selGov" style="border:none;background:transparent;font-weight:bold;width:100%">${optHtml(govs, state.searchGov, '', '')}</select>
+    </div>
+    <div class="chip">
+      <small>منطقة</small>
+      <select id="selRegion" style="border:none;background:transparent;font-weight:bold;width:100%">${optHtml(regs, state.searchRegion, '', '')}</select>
+    </div>
+    ${hasMultipleSubs ? `
+    <div class="chip">
+      <small>فرعي</small>
+      <input id="inpSub" value="${escapeHtml(state.currentSub || subsSubs[0])}" style="border:none;background:transparent;font-weight:bold;width:100%;text-align:center">
+    </div>` : `
+    <div class="chip">
+      <small>فرعي</small>
+      <b>00</b>
+    </div>`}
+  </div>`;
+
+  const blds = Object.values(state.buildings);
+  const totalRouteDue = blds.reduce((s, b) => s + b.apts.reduce((x, a) => x + (Number(a.dueAmount) || 0), 0), 0);
+
+  if (!blds.length) {
+    view.innerHTML = html + `<div class="card empty">✅ لا توجد مديونيات في المنطقة المختارة</div>`;
+    bindHeaderEvents();
+    return;
+  }
+
+
+
+
+-------------------------------------------------------------------------------------*/
+
   // المتغيرات: قطاع / بلوك / عمارة / شقة
   const secs = uniqSorted(blds.map(b => b.sector));
   if (!secs.includes(state.sector)) { state.sector = secs[0]; state.blk = ''; state.bld = ''; state.apt = ''; }
