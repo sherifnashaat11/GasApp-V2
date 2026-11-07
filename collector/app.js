@@ -122,7 +122,7 @@ async function ensureLineOfRoute() {
   return lor;
 }
 //----------------------------------------------------------------------------------------------
-/*
+
 async function loadRouteData() {
   const lor = await ensureLineOfRoute();
   const subs = lor
@@ -182,7 +182,7 @@ async function renderHome() {
   
 
 
-
+/*
 
 ===================== 6) renderHome المتطور والمرن ===================== 
 
@@ -278,7 +278,7 @@ async function renderHome() {
     bindHeaderEvents();
     return;
   }
-*/
+
 
 //======================Sherif
 
