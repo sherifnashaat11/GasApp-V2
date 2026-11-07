@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gas-v2-cache-v46'; // قمنا بتغيير الرقم
+const CACHE_NAME = 'gas-v2-cache-v48'; // V3.2
 const ASSETS = [
   './index.html',
   './app.js',

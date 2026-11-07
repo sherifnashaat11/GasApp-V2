@@ -4,142 +4,172 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>قراءة العداد</title>
+<link rel="stylesheet" href="style.css">
 <script src="dexie.min.js"></script>
 <style>
-  :root { --primary: #7c3aed; --bg: #f4f7fa; --card: #ffffff; --ink: #0c2233; --line: #d3dde4; --mute: #5b6f7d; --success: #0d9668; --danger: #d63a3a; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100dvh; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI', Tahoma, sans-serif; }
-  .app-container { display: flex; flex-direction: column; height: 100%; max-width: 420px; margin: 0 auto; padding: 15px; }
-  .header-info { text-align: center; margin-bottom: 10px; }
-  .header-info h1 { font-size: 1.2rem; color: var(--primary); font-weight: 800; }
-  .header-info p { font-size: 0.85rem; color: var(--mute); margin-top: 5px; line-height: 1.4; }
-  .form-group { background: var(--card); padding: 15px; border-radius: 16px; border: 1.5px solid var(--line); display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
-  label { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; display: block; }
-  input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.5rem; font-weight: 800; text-align: center; color: var(--primary); font-family: inherit; background: var(--bg); direction: ltr; }
-  input:focus { outline: none; border-color: var(--primary); }
-  .meta-row { display: flex; justify-content: space-between; background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 14px; font-weight: bold; margin-bottom: 5px; }
-  .calc-box { background: var(--bg); border-radius: 10px; padding: 12px; border: 1px solid var(--line); margin-top: 5px; }
-  .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin-bottom: 6px; }
+  html, body { height: 100%; overflow: hidden; }
+  body { min-height: 0; }
+  .rd { display: flex; flex-direction: column; height: 100dvh; max-width: 420px; margin: 0 auto; padding: 14px; gap: 10px; }
+  .rd-head { text-align: center; }
+  .rd-head h1 { font-size: 1.15rem; color: var(--primary); font-weight: 800; }
+  .rd-head p { font-size: .85rem; color: var(--mute); margin-top: 4px; line-height: 1.5; }
+  .rd-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 6px; }
+  .rd-box { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; }
+  .meta-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 800; }
+  .meta-row .v-prev { color: var(--primary); }
+  .meta-row .v-due { color: var(--danger); }
+  .rd label { display: block; font-weight: 800; font-size: .9rem; margin-bottom: 6px; }
+  .rd input { width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 10px; font-size: 1.6rem; font-weight: 800; text-align: center; color: var(--primary); background: var(--bg); direction: ltr; font-family: inherit; }
+  .rd input:focus { outline: none; border-color: var(--primary); }
+  .calc-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 800; margin-bottom: 6px; }
   .calc-row.total { font-size: 18px; color: var(--success); border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 4px; }
-  .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-  button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 800; cursor: pointer; font-family: inherit; transition: 0.2s; }
-  #saveBtn { background: var(--primary); color: #fff; }
+  .words { font-size: 12px; color: var(--mute); margin-top: 4px; line-height: 1.6; }
+  .tbl-wrap { overflow-x: auto; margin-top: 6px; }
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tbl th, .tbl td { border: 1px solid var(--line); padding: 6px 4px; text-align: center; }
+  .tbl th { background: var(--bg); font-weight: 800; }
+  .tbl td.sub { color: var(--mute); font-size: 11.5px; text-align: right; }
+  .rd-actions { display: flex; flex-direction: column; gap: 8px; }
+  .rd-actions button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1.05rem; font-weight: 800; cursor: pointer; }
+  #saveBtn { background: var(--primary); color: var(--primary-ink); }
+  #saveBtn:disabled { opacity: .5; }
   #cancelBtn { background: transparent; color: var(--mute); border: 2px solid var(--line); }
+  .err { color: var(--danger); font-size: 13px; font-weight: 800; min-height: 18px; text-align: center; }
 </style>
 </head>
-<body>
-<div class="app-container">
-  <div class="header-info">
+<body data-theme="light">
+<div class="rd">
+  <div class="rd-head">
     <h1>قراءة العداد</h1>
     <p id="clientInfo">جاري التحميل...</p>
   </div>
-  
-  <div class="form-group">
-    <div class="meta-row">
-      <span>القراءة السابقة: <span id="prevReadDisplay" style="color:var(--primary);">0</span></span>
-      <span>المديونية الحالية: <span id="dueDisplay" style="color:var(--danger);">0</span> ج</span>
+
+  <div class="rd-body">
+    <div class="rd-box">
+      <div class="meta-row">
+        <span>القراءة السابقة: <span id="prevReadDisplay" class="v-prev">0</span></span>
+        <span>أشهر المحاسبة: <span id="monthsDisplay" class="v-prev">1</span></span>
+        <span>المديونية: <span id="dueDisplay" class="v-due">0</span> ج</span>
+      </div>
     </div>
 
-    <div>
-      <label>القراءة الحالية (حد أقصى 5 أرقام)</label>
-      <input id="v" type="number" maxlength="5" inputmode="numeric" autocomplete="off" placeholder="00000">
+    <div class="rd-box">
+      <label for="v">القراءة الحالية (حد أقصى 5 أرقام)</label>
+      <input id="v" type="number" inputmode="numeric" autocomplete="off" placeholder="00000">
+      <div class="err" id="err"></div>
     </div>
-    
-    <div class="calc-box">
-      <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 m³</span></div>
-      <div class="calc-row total"><span>الفاتورة القادمة (التقديرية):</span><span id="invoiceVal">0 ج.م</span></div>
+
+    <div class="rd-box">
+      <div class="calc-row"><span>الاستهلاك:</span><span id="consumptionVal">0 م³</span></div>
+      <div class="calc-row"><span>المتوسط الشهري:</span><span id="avgVal">0 م³</span></div>
+      <div class="tbl-wrap" id="breakdown"></div>
+      <div class="calc-row" style="margin-top:8px"><span>الرسوم (مرة واحدة):</span><span id="feesVal">0 ج.م</span></div>
+      <div class="calc-row total"><span>الفاتورة القادمة (تقديرية):</span><span id="invoiceVal">0 ج.م</span></div>
+      <div class="words" id="wordsVal"></div>
     </div>
   </div>
 
-  <div class="actions">
+  <div class="rd-actions">
     <button id="saveBtn">حفظ القراءة</button>
     <button id="cancelBtn">إلغاء</button>
   </div>
 </div>
 
 <script type="module">
-  import { db } from '../shared/db.js';
+  import { db, initDb, calcNextInvoice, recordReading, getReadingForPeriod, getCurrentPeriod } from '../shared/db.js';
 
+  const $ = (id) => document.getElementById(id);
   const p = new URLSearchParams(location.search);
   const key = p.get('k');
-  const name = p.get('n') || 'بدون اسم';
-  const addr = p.get('a') || '';
-  const prevReading = Number(p.get('p')) || 0;
-  const billingMonths = Number(p.get('m')) || 1; 
+  const period = getCurrentPeriod();            // لا فترة ثابتة
+  let prevReading = Number(p.get('p')) || 0;
+  let months = Number(p.get('m')) || 1;
+  let last = null;                               // آخر حساب
 
-  document.getElementById('clientInfo').innerHTML = `<b>${name}</b><br>${addr}`;
-  document.getElementById('prevReadDisplay').textContent = prevReading;
-  
-  let currentDue = 0;
+  /* ---- مزامنة الثيم مع الصفحة الأم ---- */
+  const syncTheme = () => document.body.setAttribute('data-theme', localStorage.getItem('app-theme') || 'light');
+  syncTheme();
+  window.addEventListener('storage', (e) => { if (e.key === 'app-theme') syncTheme(); });
+  window.addEventListener('message', (e) => { if (e.data && e.data.type === 'THEME') syncTheme(); });
 
-  const REAL_PRICES = { fees: 18, tiers: [{ limit: 30, price: 6 }, { limit: 60, price: 8 }, { limit: null, price: 12 }] };
-
-  async function init() {
-    if (!key) return alert('خطأ: لم يتم تمرير كود العميل');
-    const sub = await db.subscribers.get(key);
-    if (sub) {
-      currentDue = Number(sub.dueAmount) || 0;
-      document.getElementById('dueDisplay').textContent = currentDue;
-    }
-    
-    const move = await db.movements.where({ key: key }).first();
-    if (move && move.reading) {
-      document.getElementById('v').value = move.reading;
-      calculate(move.reading);
-    }
-  }
-
-  function calculate(currentReading) {
-    const consumption = Math.max(0, currentReading - prevReading);
-    document.getElementById('consumptionVal').textContent = `${consumption} m³`;
-    
-    let remaining = consumption;
-    let total = 0;
-    let prevLimit = 0;
-
-    for (let i = 0; i < REAL_PRICES.tiers.length; i++) {
-      if (remaining <= 0) break;
-      const tier = REAL_PRICES.tiers[i];
-      let cap = (tier.limit === null) ? remaining : Math.max(0, tier.limit - prevLimit);
-      const used = Math.min(remaining, cap);
-      total += used * tier.price;
-      remaining -= used;
-      if (tier.limit !== null) prevLimit = tier.limit;
-    }
-    total += REAL_PRICES.fees;
-    
-    // عرض الفاتورة القادمة فقط (بدون إضافة المديونية)
-    document.getElementById('invoiceVal').textContent = `${total.toFixed(2)} ج.م`;
-    return { consumption, total };
-  }
-
-  document.getElementById('v').addEventListener('input', function() {
-    if (this.value.length > 5) this.value = this.value.slice(0, 5);
-    calculate(Number(this.value) || 0);
-  });
-
-  document.getElementById('saveBtn').onclick = async () => {
-    const val = Number(document.getElementById('v').value);
-    if (!val || val < prevReading) return alert('⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي القراءة السابقة');
-    
-    const result = calculate(val);
-    
-    try {
-      const existing = await db.movements.where({ key: key }).first();
-      if (existing) {
-        await db.movements.update(existing.id, { reading: val, consumption: result.consumption, estimatedInvoice: result.total, date: new Date().toISOString() });
-      } else {
-        await db.movements.add({ key: key, period: '2026-11', reading: val, prevReading: prevReading, consumption: result.consumption, estimatedInvoice: result.total, months: billingMonths, status: 'pending', date: new Date().toISOString() });
-      }
-      if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_SAVED' }, '*');
-      else window.close();
-    } catch (err) { alert('خطأ: ' + err.message); }
-  };
-
-  document.getElementById('cancelBtn').onclick = () => {
-    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'READING_CANCEL' }, '*');
+  const fmt = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const post = (type) => {
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type }, '*');
     else window.close();
   };
+
+  $('clientInfo').innerHTML = '';
+  const b = document.createElement('b'); b.textContent = p.get('n') || 'بدون اسم';
+  $('clientInfo').append(b, document.createElement('br'), document.createTextNode(p.get('a') || ''));
+
+  function render(reading) {
+    const inv = calcNextInvoice({ reading, prevReading, months, period });
+    last = inv;
+    $('consumptionVal').textContent = `${fmt(inv.cons)} م³`;
+    $('avgVal').textContent = `${fmt(inv.avg)} م³`;
+    $('feesVal').textContent = `${fmt(inv.fees)} ج.م`;
+    $('invoiceVal').textContent = `${fmt(inv.grandTotal)} ج.م`;
+    $('wordsVal').textContent = inv.cons > 0 || reading ? `${inv.words} جنيهاً مصرياً فقط لا غير` : '';
+
+    // تفصيل شهري
+    const rows = inv.rows.map(r => {
+      const detail = r.tiers.map(t => `${t.name}: ${fmt(t.qty)}×${fmt(t.price)}`).join(' + ') || '—';
+      return `<tr><td>${r.month}</td><td class="sub">${detail}</td><td>${fmt(r.cost)}</td></tr>`;
+    }).join('');
+    $('breakdown').innerHTML = `<table class="tbl"><thead><tr><th>الشهر</th><th>الشرائح</th><th>التكلفة</th></tr></thead><tbody>${rows}</tbody></table>`;
+    return inv;
+  }
+
+  async function init() {
+    if (!key) { $('err').textContent = 'خطأ: لم يتم تمرير كود العميل'; $('saveBtn').disabled = true; return; }
+    await initDb();
+    const sub = await db.subscribers.get(key);
+    if (sub) {
+      if (!p.has('p')) prevReading = Number(sub.prevReading) || 0;
+      if (!p.has('m')) months = Number(sub.months) || 1;
+      $('dueDisplay').textContent = fmt(Number(sub.dueAmount) || 0);
+      if (!p.has('n')) $('clientInfo').textContent = sub.name || '';
+    }
+    $('prevReadDisplay').textContent = prevReading;
+    $('monthsDisplay').textContent = months;
+
+    const existing = await getReadingForPeriod(key, period);   // قراءة فعلية فقط (لا سداد)
+    if (existing && existing.reading !== undefined) {
+      $('v').value = existing.reading;
+      render(existing.reading);
+    } else {
+      render(0);
+    }
+    $('v').focus();
+  }
+
+  $('v').addEventListener('input', function () {
+    if (this.value.length > 5) this.value = this.value.slice(0, 5);
+    $('err').textContent = '';
+    render(Number(this.value) || 0);
+  });
+
+  $('saveBtn').onclick = async () => {
+    const raw = $('v').value;
+    const val = Number(raw);
+    if (raw === '' || Number.isNaN(val)) { $('err').textContent = '⚠️ أدخل القراءة الحالية'; return; }
+    if (val < prevReading) { $('err').textContent = '⚠️ القراءة الحالية يجب أن تكون أكبر من أو تساوي السابقة'; return; }
+    $('saveBtn').disabled = true;
+    try {
+      const inv = render(val);
+      await recordReading({
+        key, reading: val, prevReading, consumption: inv.cons,
+        estimatedInvoice: inv.grandTotal, months, period,
+        invoice: { rows: inv.rows, fees: inv.fees, grandTotal: inv.grandTotal, words: inv.words, avg: inv.avg }
+      });
+      post('READING_SAVED');
+    } catch (err) {
+      $('err').textContent = 'خطأ: ' + err.message;
+      $('saveBtn').disabled = false;
+    }
+  };
+
+  $('cancelBtn').onclick = () => post('READING_CANCEL');
 
   init();
 </script>
