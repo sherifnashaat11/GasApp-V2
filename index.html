@@ -1,10 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="utf-8">
-    <title>جاري التوجيه...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>محلل التجزئة</title>
+    
+    <!-- ربط ملف المانيفست -->
+    <link rel="manifest" href="manifest.json">
+    <!-- لون شريط الحالة في الموبايل -->
+    <meta name="theme-color" content="#4CAF50">
+    
     <script>
-        // توجيه تلقائي إلى مجلد collector
+        // تسجيل الـ Service Worker
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register("./sw.js")
+                    .then(reg => console.log("تم تسجيل الـ Service Worker بنجاح!"))
+                    .catch(err => console.log("خطأ في تسجيل الـ Service Worker:", err));
+            });
+        }
+
+        // التحويل لصفحة الكوليكتور
         window.location.href = "collector/index.html";
     </script>
 </head>
