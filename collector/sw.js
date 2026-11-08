@@ -1,19 +1,23 @@
-const CACHE_NAME = 'gas-v2-cache-v164'; // V3.2
+const CACHE_NAME = 'gas-v2-cache-v165'; // غيرت الرقم عشان يجبر المتصفح يحدث الكاش
 const ASSETS = [
+  './', // عشان يخزن صفحة الجذر (اللي فيها التحويل)
   './index.html',
-  './app.js',
-  './importer.js',
-  './reading.html',
-  './style.css',
-  './dexie.min.js',
-  '../shared/db.js'
+  './manifest.json', // مهم جداً تخزنه
+  './collector/index.html', // صفحة الكوليكتور
+  './collector/app.js',
+  './collector/importer.js',
+  './collector/reading.html',
+  './collector/style.css',
+  './collector/dexie.min.js',
+  './shared/db.js', // شيلت النقطتين اللي كانوا بيطلعوا لفوق
+  './icons/icon-192x192.png', // يفضل تخزن الأيقونات الأساسية
+  './icons/icon-512x512.png'
 ];
 
 // تثبيت الـ Service Worker وتخزين الملفات
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // استخدام Promise.allSettled لتجاهل أي ملف غير موجود بدلاً من إيقاف العملية
       return Promise.allSettled(
         ASSETS.map(url => cache.add(url))
       );
@@ -36,9 +40,8 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// استراتيجية الجلب: Cache First (لتسريع التطبيق)
+// استراتيجية الجلب
 self.addEventListener('fetch', (e) => {
-  // تجاهل طلبات الـ API أو الملفات المشفرة
   if (e.request.url.includes('/downloads/') || e.request.url.includes('/api/')) {
     return;
   }
