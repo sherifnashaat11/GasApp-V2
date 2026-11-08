@@ -1,7 +1,7 @@
 {
   "name": "محلل التجزئة - GasApp",
   "short_name": "محلل التجزئة",
-  "description": "برنامج محلل التجزئة لإدارة العمليات والمحطات.",
+  "description": "برنامج خاص و تجريبى لمساعدة  المحصلين على اداء عملهم .",
   "start_url": "./collector/index.html",
   "scope": "./",
   "display": "standalone",
