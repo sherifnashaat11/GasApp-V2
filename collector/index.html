@@ -8,6 +8,19 @@
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
 <script src="dexie.min.js"></script>
+
+<!-- كود تسجيل الـ Service Worker لضمان العمل أوفلاين -->
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      // المسار ../sw.js يعني اطلع من فولدر collector للفولدر الرئيسي
+      navigator.serviceWorker.register('../sw.js', { scope: '../' })
+        .then(reg => console.log("Service Worker registered successfully from collector"))
+        .catch(err => console.error("Service Worker registration failed:", err));
+    });
+  }
+</script>
+
 </head>
 <body data-theme="light">
 <header class="top">
@@ -33,11 +46,9 @@
   <button type="button" data-nav="search">🔍 البحث</button>
   <button type="button" data-nav="readings">📖 القراءات</button>
 
-
-  
   <!--button type="button" data-nav="ledger">✅ الأرشيف</button-->
-<!-- في القائمة المنسدلة Menu -->
-<button data-nav="ledger">📜 الأرشيف</button>
+  <!-- في القائمة المنسدلة Menu -->
+  <button data-nav="ledger">📜 الأرشيف</button>
   
   <button type="button" data-nav="details">👤 بياناتي</button>
   <button type="button" data-nav="settings">⚙️ الإعدادات</button>
@@ -64,20 +75,8 @@
 </main>
 
 <nav class="tabs">
-  
-<!-- التبويب السفلي الجديد -->
-
-
 <button data-tab="home" class="on">🏠 التحصيل</button>
 <button data-tab="readings">📋 القراءات</button>
-
-
-
-
-
-
-
-  
 </nav>
 
 <iframe id="printFrame" title="print" aria-hidden="true"></iframe>
