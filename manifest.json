@@ -1,13 +1,15 @@
 {
-  "name": "محلل التجزئة - GasApp",
-  "short_name": "محلل التجزئة",
-  "description": "برنامج خاص و تجريبى لمساعدة  المحصلين على اداء عملهم .",
+  "name": "المحصل الرقمي - GasApp",
+  "short_name": "المحصل الرقمي",
   "start_url": "./collector/index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#4CAF50",
+  "theme_color": "#ffffff",
+  "description": "برنامج مخصص لمساعدة المحصلين على إدارة وتحصيل العمليات المالية بسهولة ويسر.",
+  "lang": "ar",
+  "dir": "rtl",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "icons/icon-192x192.png",
@@ -20,18 +22,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
-    },
-    {
-      "src": "icons/maskable_icon_x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "icons/maskable_icon_x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
     }
   ]
 }
